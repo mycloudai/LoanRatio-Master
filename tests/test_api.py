@@ -32,6 +32,8 @@ def test_about(client):
     assert data["version"]
     assert data["repoUrl"].startswith("https://github.com/mycloudai/")
     assert "Changelog" in data["changelogMarkdown"] or "更新" in data["changelogMarkdown"]
+    assert "userguideMarkdown" in data
+    assert "使用指南" in data["userguideMarkdown"]
 
 
 def test_reset_gated(tmp_path, monkeypatch):

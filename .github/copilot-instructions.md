@@ -30,7 +30,16 @@ bash qa/run_qa.sh
 - 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式
 - 使用中文描述变更内容
 - 分类：Added / Changed / Fixed / Removed / Improved
-- 在 `## [Unreleased]` 或新版本号下添加条目
+- **每次新修改必须创建新版本号条目**，不得将新变更追加到已有版本中；已发布的版本条目视为不可变
+- 在文件顶部（`---` 分隔线之后）添加新版本块
+
+## USERGUIDE 更新
+
+每次涉及用户可感知的功能新增或变更后，同步更新 `USERGUIDE.md`：
+
+- 使用通俗易懂的中文，面向普通用户（非开发者）
+- 涵盖新功能的操作步骤和注意事项
+- 如有 UI 变化，更新对应章节的描述
 
 ## 版本号更新
 
@@ -49,6 +58,7 @@ bash qa/run_qa.sh
 | `app/storage.py` | JSON 文件存储 |
 | `app/exporter.py` | Excel 导出 |
 | `static/index.html` | 单文件前端（Bootstrap + Chart.js） |
+| `USERGUIDE.md` | 用户使用指南（前端可查看） |
 | `tests/` | pytest 单元测试 |
 | `qa/run_qa.sh` | E2E QA 脚本（Playwright） |
 

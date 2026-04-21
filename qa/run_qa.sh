@@ -164,6 +164,7 @@ assert_eq       "/api/health.ok"             "$(curl -sf $URL/api/health | jq -r
 assert_nonempty "/api/health.version"        "$(curl -sf $URL/api/health | jq -r .version)"
 assert_eq       "/api/about.repoUrl"         "$(curl -sf $URL/api/about  | jq -r .repoUrl)"               "https://github.com/mycloudai/LoanRatio-Master"
 assert_nonempty "/api/about.changelogMd"     "$(curl -sf $URL/api/about  | jq -r .changelogMarkdown)"
+assert_nonempty "/api/about.userguide"       "$(curl -sf $URL/api/about  | jq -r .userguideMarkdown)"
 assert_nonempty "/api/about.version"         "$(curl -sf $URL/api/about  | jq -r .version)"
 
 # =====================================================================
@@ -181,6 +182,13 @@ click_testid 'changelog-btn'
 sleep 0.3
 CL_HTML="$(peval "document.querySelector('[data-testid=\"changelog-body\"]')?.innerHTML")"
 if echo "$CL_HTML" | grep -Eq '<h[12]'; then ok "CHANGELOG 渲染为 HTML (含标题)"; else bad "CHANGELOG 未渲染: ${CL_HTML:0:80}"; fi
+PCLI press Escape >/dev/null 2>&1 || true
+sleep 0.2
+
+click_testid 'userguide-btn'
+sleep 0.3
+UG_HTML="$(peval "document.querySelector('[data-testid=\"userguide-body\"]')?.innerHTML")"
+if echo "$UG_HTML" | grep -Eq '<h[12]'; then ok "USERGUIDE 渲染为 HTML (含标题)"; else bad "USERGUIDE 未渲染: ${UG_HTML:0:80}"; fi
 PCLI press Escape >/dev/null 2>&1 || true
 sleep 0.2
 
@@ -389,6 +397,48 @@ assert_near "月2 利息份额 p1 = 550 (基于 CP 55%)" "$(api_computed 1 p1 in
 assert_near "月2 利息份额 p2 = 450 (基于 CP 45%)" "$(api_computed 1 p2 interestShare)" "450"
 assert_near "月2 p1 累计 = 110450"                 "$(api_computed 1 p1 cumulativePrincipal)" "110450"
 assert_near "月2 p2 累计 = 90550"                  "$(api_computed 1 p2 cumulativePrincipal)" "90550"
+
+# =====================================================================
+# 11b. 手动月份有本金偿还 → CP 按手动比例累加 → 自动月份按 CP 比例
+#   首付 60000/40000 (60%/40%)
+#   月1 auto: 利息 1000, 本金 2000, 付款 2000/1000
+#     interest: p1=600 p2=400; raw: 1400/600; CP: 61400/40600
+#   月2 manual 40/60: 利息 1000, 本金 2000
+#     adj: 0.4*2000=800, 0.6*2000=1200; CP: 62200/41800
+#   月3 auto: 利息 1000, 本金 2000, 付款 1500/1500
+#     利息按 CP 比例 (62200/104000≈59.81%), 非手动 40/60
+# =====================================================================
+section "11b. 手动月份含本金→自动恢复 CP 比例"
+load_state '{
+  "payers":[{"id":"p1","name":"张三"},{"id":"p2","name":"李四"}],
+  "loans":[{"id":"l1","name":"商贷","originalAmount":500000,"remainingPrincipal":500000}],
+  "downpayment":{"contributions":[{"payerId":"p1","amount":60000},{"payerId":"p2","amount":40000}]},
+  "months":[
+    {"yearMonth":"2024-01","mode":"auto",
+     "loanDetails":[{"loanId":"l1","interest":1000,"principal":2000}],
+     "payerPayments":[{"payerId":"p1","amount":2000},{"payerId":"p2","amount":1000}]},
+    {"yearMonth":"2024-02","mode":"manual",
+     "loanDetails":[{"loanId":"l1","interest":1000,"principal":2000}],
+     "payerPayments":[{"payerId":"p1","amount":1500},{"payerId":"p2","amount":1500}],
+     "manualRatios":{"p1":0.4,"p2":0.6}},
+    {"yearMonth":"2024-03","mode":"auto",
+     "loanDetails":[{"loanId":"l1","interest":1000,"principal":2000}],
+     "payerPayments":[{"payerId":"p1","amount":1500},{"payerId":"p2","amount":1500}]}
+  ]
+}'
+# 月1 auto
+assert_near "11b 月1 p1 adj = 1400"       "$(api_computed 0 p1 adjPrincipal)"        "1400"
+assert_near "11b 月1 p2 adj = 600"        "$(api_computed 0 p2 adjPrincipal)"        "600"
+assert_near "11b 月1 p1 累计 = 61400"     "$(api_computed 0 p1 cumulativePrincipal)" "61400"
+assert_near "11b 月1 p2 累计 = 40600"     "$(api_computed 0 p2 cumulativePrincipal)" "40600"
+# 月2 manual: 本金按 40/60 计入 CP
+assert_near "11b 月2 p1 adj = 800"        "$(api_computed 1 p1 adjPrincipal)"        "800"
+assert_near "11b 月2 p2 adj = 1200"       "$(api_computed 1 p2 adjPrincipal)"        "1200"
+assert_near "11b 月2 p1 累计 = 62200"     "$(api_computed 1 p1 cumulativePrincipal)" "62200"
+assert_near "11b 月2 p2 累计 = 41800"     "$(api_computed 1 p2 cumulativePrincipal)" "41800"
+# 月3 auto: 利息按 CP 比例 ≈ 59.81%/40.19%, 非手动 40/60
+assert_near "11b 月3 p1 利息 ≈ 598"       "$(api_computed 2 p1 interestShare)"       "598.08"
+assert_near "11b 月3 p2 利息 ≈ 402"       "$(api_computed 2 p2 interestShare)"       "401.92"
 
 # =====================================================================
 # 12. 参还人 startMonth: 中途加入

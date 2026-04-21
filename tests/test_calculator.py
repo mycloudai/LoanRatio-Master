@@ -440,7 +440,84 @@ def test_manual_month_basis_auto_uses_cp_ratio():
     assert m2["p2"]["interestShare"] == pytest.approx(500.0, abs=1e-6)
 
 
-# --------- Edge: three-way redistribution ----------------------------------
+def test_manual_with_principal_updates_cp_and_auto_resumes():
+    """手动月份有实际本金偿还时，本金按手动比例计入 CP，
+    后续自动月份基于更新后的 CP 推算比例。"""
+    s = _empty_state()
+    _seed_two_payers_one_loan(s)
+    s["downpayment"] = {
+        "contributions": [
+            {"payerId": "p1", "amount": 60_000},
+            {"payerId": "p2", "amount": 40_000},
+        ],
+        "CP0": {"p1": 60_000, "p2": 40_000},
+    }
+    # Month 1 auto
+    s["months"].append(
+        {
+            "yearMonth": "2024-01",
+            "mode": "auto",
+            "loanDetails": [{"loanId": "l1", "interest": 1000, "principal": 2000}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 2000},
+                {"payerId": "p2", "amount": 1000},
+            ],
+            "manualRatios": None,
+        }
+    )
+    # Month 2 manual 40/60, with principal=2000
+    s["months"].append(
+        {
+            "yearMonth": "2024-02",
+            "mode": "manual",
+            "loanDetails": [{"loanId": "l1", "interest": 1000, "principal": 2000}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 1500},
+                {"payerId": "p2", "amount": 1500},
+            ],
+            "manualRatios": {"p1": 0.4, "p2": 0.6},
+        }
+    )
+    # Month 3 auto
+    s["months"].append(
+        {
+            "yearMonth": "2024-03",
+            "mode": "auto",
+            "loanDetails": [{"loanId": "l1", "interest": 1000, "principal": 2000}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 1500},
+                {"payerId": "p2", "amount": 1500},
+            ],
+            "manualRatios": None,
+        }
+    )
+    calculator.recompute_all(s)
+
+    m1 = s["months"][0]["computed"]["perPayer"]
+    m2 = s["months"][1]["computed"]["perPayer"]
+    m3 = s["months"][2]["computed"]["perPayer"]
+
+    # Month 1 auto: interest p1=600 p2=400, raw p1=1400 p2=600
+    assert m1["p1"]["interestShare"] == pytest.approx(600.0, abs=0.01)
+    assert m1["p1"]["adjPrincipal"] == pytest.approx(1400.0, abs=0.01)
+    assert m1["p2"]["adjPrincipal"] == pytest.approx(600.0, abs=0.01)
+    # CP after month 1: p1=61400, p2=40600
+    assert m1["p1"]["cumulativePrincipal"] == pytest.approx(61400.0, abs=0.01)
+    assert m1["p2"]["cumulativePrincipal"] == pytest.approx(40600.0, abs=0.01)
+
+    # Month 2 manual: adjPrincipal = ratio * principal => p1=800, p2=1200
+    assert m2["p1"]["adjPrincipal"] == pytest.approx(800.0, abs=0.01)
+    assert m2["p2"]["adjPrincipal"] == pytest.approx(1200.0, abs=0.01)
+    # CP after month 2: p1=62200, p2=41800
+    assert m2["p1"]["cumulativePrincipal"] == pytest.approx(62200.0, abs=0.01)
+    assert m2["p2"]["cumulativePrincipal"] == pytest.approx(41800.0, abs=0.01)
+
+    # Month 3 auto: uses CP ratio (62200/104000≈0.59808), NOT manual 40/60
+    assert m3["p1"]["interestShare"] == pytest.approx(598.08, abs=0.01)
+    assert m3["p2"]["interestShare"] == pytest.approx(401.92, abs=0.01)
+    # CP continues accumulating
+    assert m3["p1"]["cumulativePrincipal"] > 62200
+    assert m3["p2"]["cumulativePrincipal"] > 41800
 
 def test_three_payer_negative_redistribution_weighted():
     s = _empty_state()

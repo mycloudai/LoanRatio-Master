@@ -209,6 +209,8 @@
          class="btn btn-outline-light btn-sm" href="#"><i class="bi bi-github me-1"></i>GitHub 仓库</a>
       <button class="btn btn-outline-light btn-sm" data-testid="changelog-btn"
               id="changelogBtn" data-bs-toggle="modal" data-bs-target="#changelogModal"><i class="bi bi-journal-text me-1"></i>更新日志</button>
+      <button class="btn btn-outline-light btn-sm" data-testid="userguide-btn"
+              id="userguideBtn" data-bs-toggle="modal" data-bs-target="#userguideModal"><i class="bi bi-book me-1"></i>使用指南</button>
     </div>
   </div>
 
@@ -466,6 +468,24 @@
   </div>
 </div>
 
+<!-- ============== USERGUIDE MODAL ============== -->
+<div class="modal fade" id="userguideModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">使用指南</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="userguideBody" data-testid="userguide-body">
+        加载中…
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <footer class="text-center small-muted app-footer my-4">
   <span><i class="bi bi-calculator me-1"></i>共同还贷所有权计算器</span>
   · <span data-testid="footer-version" id="footerVersion">v…</span>
@@ -590,6 +610,15 @@ async function loadAbout() {
     pre.textContent = info.changelogMarkdown || '(暂无更新日志)';
     body.innerHTML = '';
     body.appendChild(pre);
+  }
+  const ugBody = $('userguideBody');
+  if (window.marked && info.userguideMarkdown) {
+    ugBody.innerHTML = marked.parse(info.userguideMarkdown);
+  } else {
+    const pre = document.createElement('pre');
+    pre.textContent = info.userguideMarkdown || '(暂无使用指南)';
+    ugBody.innerHTML = '';
+    ugBody.appendChild(pre);
   }
 }
 

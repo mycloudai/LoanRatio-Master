@@ -18,6 +18,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from . import REPO_URL, __version__, calculator, exporter, storage
 
 _CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"
+_USERGUIDE_PATH = Path(__file__).parent.parent / "USERGUIDE.md"
 
 YM_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 DOWNPAYMENT_YM = "0000-00"
@@ -116,11 +117,16 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
             changelog = _CHANGELOG_PATH.read_text(encoding="utf-8")
         except OSError:
             changelog = ""
+        try:
+            userguide = _USERGUIDE_PATH.read_text(encoding="utf-8")
+        except OSError:
+            userguide = ""
         return jsonify(
             {
                 "version": __version__,
                 "repoUrl": REPO_URL,
                 "changelogMarkdown": changelog,
+                "userguideMarkdown": userguide,
             }
         )
 
