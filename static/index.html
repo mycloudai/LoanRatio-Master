@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>共同还贷所有权计算器</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+  integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+  integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+  integrity="sha384-y1IFGbY2eSvHwoLaqjTvHsCe/EbTGtRcOMxZBlR2/CbY4qZkPEhpqzBSJ4IAW0bL" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<style>
+  body { background:#f6f8fa; }
+  .app-container { max-width: 1200px; margin: 0 auto; padding: 12px; }
+  .nav-tabs .nav-link { cursor: pointer; }
+  .clickable { color:#0d6efd; cursor:pointer; text-decoration:underline; }
+  .small-muted { color:#6c757d; font-size:0.85em; }
+  .table-sm td, .table-sm th { padding: 0.35rem; }
+  .formula { font-family: 'Courier New', monospace; background:#f1f3f5; padding:6px; border-radius:4px; white-space:pre-wrap; }
+  .ratio-cell { font-variant-numeric: tabular-nums; }
+  .manual-badge { background:#ffc107; color:#212529; padding:1px 6px; border-radius:3px; font-size:0.75em; }
+  .auto-badge { background:#198754; color:#fff; padding:1px 6px; border-radius:3px; font-size:0.75em; }
+  .read-only-banner { background:#fff3cd; padding:6px; border-radius:4px; margin-bottom:8px; }
+  @media (max-width: 576px) {
+    .nav-tabs .nav-link { font-size: 0.85em; padding: 0.4rem 0.6rem; }
+  }
+</style>
+</head>
+<body>
+<div class="app-container">
+
+<!-- ============== SETUP MODAL ============== -->
+<div class="modal fade" id="setupModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">首次启动 - 数据保存路径</h5></div>
+      <div class="modal-body">
+        <p class="small-muted">请选择数据文件保存路径。可使用默认路径 <code>~/LoanRatioData/data.json</code> 或自定义路径。</p>
+        <div class="mb-3">
+          <label class="form-label">数据文件完整路径</label>
+          <input type="text" class="form-control" id="setupDataPathInput"
+                 data-testid="setup-data-path-input" placeholder="/path/to/data.json" />
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" id="setupDefaultBtn"
+                data-testid="setup-default-btn">使用默认路径</button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="setupConfirmBtn" data-testid="setup-confirm-btn">确认</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============== MAIN UI ============== -->
+<div id="mainApp" style="display:none;">
+  <div class="d-flex flex-wrap align-items-center justify-content-between my-3 gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <h3 class="mb-0">共同还贷所有权计算器</h3>
+      <span class="badge bg-secondary" data-testid="app-version" id="appVersionBadge">v…</span>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <a id="repoLink" data-testid="repo-link" target="_blank" rel="noopener"
+         class="btn btn-outline-dark btn-sm" href="#">GitHub 仓库</a>
+      <button class="btn btn-outline-primary btn-sm" data-testid="changelog-btn"
+              id="changelogBtn" data-bs-toggle="modal" data-bs-target="#changelogModal">更新日志</button>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs mb-3" id="mainTabs">
+    <li class="nav-item"><a class="nav-link active" data-tab="payers" data-testid="tab-payers">参还人</a></li>
+    <li class="nav-item"><a class="nav-link" data-tab="loans" data-testid="tab-loans">贷款</a></li>
+    <li class="nav-item"><a class="nav-link" data-tab="months" data-testid="tab-months">月份</a></li>
+    <li class="nav-item"><a class="nav-link" data-tab="summary" data-testid="tab-summary">汇总</a></li>
+    <li class="nav-item"><a class="nav-link" data-tab="forecast" data-testid="tab-forecast">预测</a></li>
+  </ul>
+
+  <!-- ===== Payers tab ===== -->
+  <div class="tab-pane" id="tab-payers-pane">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h6>新增参还人</h6>
+        <div class="row g-2">
+          <div class="col-md-4"><input class="form-control" placeholder="姓名" id="payerNameInput" data-testid="payer-name-input"></div>
+          <div class="col-md-4"><input class="form-control" placeholder="起始月份 YYYY-MM (可选)" id="payerStartMonthInput" data-testid="payer-start-month-input"></div>
+          <div class="col-md-2"><button class="btn btn-primary w-100" id="payerAddBtn" data-testid="payer-add-btn">添加</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <h6>参还人列表</h6>
+        <div id="payersList"></div>
+      </div>
+    </div>
+
+    <div class="card mb-3" id="downpaymentSection" data-testid="downpayment-section">
+      <div class="card-body">
+        <h6>首付（仅在尚未录入任何还款月时可设置）</h6>
+        <div id="downpaymentInputs"></div>
+        <button class="btn btn-secondary mt-2" id="downpaymentSaveBtn" data-testid="downpayment-save-btn">保存首付</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Loans tab ===== -->
+  <div class="tab-pane" id="tab-loans-pane" style="display:none;">
+    <div class="card mb-3"><div class="card-body">
+      <h6>新增贷款</h6>
+      <div class="row g-2">
+        <div class="col-md-3"><input class="form-control" placeholder="贷款名称" id="loanNameInput" data-testid="loan-name-input"></div>
+        <div class="col-md-3"><input type="number" class="form-control" placeholder="原始金额" id="loanOriginalInput" data-testid="loan-original-input"></div>
+        <div class="col-md-3"><input type="number" class="form-control" placeholder="当前剩余本金" id="loanRemainingInput" data-testid="loan-remaining-input"></div>
+        <div class="col-md-3"><button class="btn btn-primary w-100" id="loanAddBtn" data-testid="loan-add-btn">添加</button></div>
+      </div>
+    </div></div>
+    <div class="card mb-3"><div class="card-body">
+      <h6>贷款列表</h6>
+      <div id="loansList"></div>
+    </div></div>
+  </div>
+
+  <!-- ===== Months tab ===== -->
+  <div class="tab-pane" id="tab-months-pane" style="display:none;">
+    <div class="alert alert-info" id="monthsGateMsg" style="display:none;">需先添加至少一位参还人和一笔贷款，才能录入月份。</div>
+
+    <div class="card mb-3"><div class="card-body">
+      <h6>录入新月份</h6>
+      <div class="row g-2 mb-2">
+        <div class="col-md-3"><input class="form-control" placeholder="年月 YYYY-MM" id="monthYearMonthInput" data-testid="month-yearmonth-input"></div>
+        <div class="col-md-4">
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="monthMode" id="monthModeAuto" value="auto" data-testid="month-mode-auto" checked>
+            <label class="form-check-label" for="monthModeAuto">自动模式</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="monthMode" id="monthModeManual" value="manual" data-testid="month-mode-manual">
+            <label class="form-check-label" for="monthModeManual">手动模式</label>
+          </div>
+        </div>
+      </div>
+
+      <div id="monthAutoFields">
+        <h6 class="mt-3">各贷款本月利息与本金</h6>
+        <div id="monthLoanFields"></div>
+        <h6 class="mt-3">各参还人本月还款额</h6>
+        <div id="monthPayerPaymentFields"></div>
+      </div>
+
+      <div id="monthManualFields" style="display:none;">
+        <h6 class="mt-3">各参还人手动权益比例（小数，总和=1.0）</h6>
+        <div id="monthManualRatioFields"></div>
+      </div>
+
+      <button class="btn btn-primary mt-3" id="monthCreateBtn" data-testid="month-create-btn">创建月份</button>
+      <div class="small-muted mt-2" id="monthHint"></div>
+    </div></div>
+
+    <div class="card mb-3"><div class="card-body">
+      <h6>历史月份</h6>
+      <div class="mb-2">
+        <label class="me-2">跳转月份：</label>
+        <select id="monthJumpSelect" class="form-select form-select-sm d-inline-block w-auto"></select>
+      </div>
+      <div id="monthsList" data-testid="months-list"></div>
+    </div></div>
+  </div>
+
+  <!-- ===== Summary tab ===== -->
+  <div class="tab-pane" id="tab-summary-pane" style="display:none;">
+    <div class="card mb-3"><div class="card-body">
+      <h6>各参还人当前权益</h6>
+      <div id="summaryPayers"></div>
+    </div></div>
+    <div class="card mb-3"><div class="card-body">
+      <h6>各贷款剩余本金</h6>
+      <div id="summaryLoans"></div>
+    </div></div>
+    <div class="card mb-3"><div class="card-body d-flex justify-content-between align-items-center">
+      <div>
+        <h6 class="mb-0">月度权益比例历史</h6>
+        <div class="small-muted">点击月度净本金可查看完整公式推导</div>
+      </div>
+      <a class="btn btn-success" id="exportExcelBtn" data-testid="export-excel-btn" href="/api/export/excel" target="_blank">导出 Excel</a>
+    </div></div>
+    <div class="card mb-3"><div class="card-body table-responsive">
+      <table class="table table-sm" id="summaryHistoryTable"></table>
+    </div></div>
+  </div>
+
+  <!-- ===== Forecast tab ===== -->
+  <div class="tab-pane" id="tab-forecast-pane" style="display:none;">
+    <div class="card mb-3"><div class="card-body">
+      <h6>权益趋势预测</h6>
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">基准窗口（月）</label>
+          <input type="number" class="form-control" value="3" id="forecastWindowInput" data-testid="forecast-window-input">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">预测时长（月）</label>
+          <input type="number" class="form-control" value="12" id="forecastHorizonInput" data-testid="forecast-horizon-input">
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-primary w-100" id="forecastRunBtn" data-testid="forecast-run-btn">运行预测</button>
+        </div>
+      </div>
+      <div class="mt-3">预测贷款结清月份：<span data-testid="forecast-payoff-month" id="forecastPayoffMonth">-</span></div>
+      <div class="small-muted">预测数据为估算值，仅供参考。</div>
+      <div class="mt-3" id="forecastFinalRatios"></div>
+      <canvas id="forecastChart" style="margin-top:16px; max-height:400px;"></canvas>
+    </div></div>
+  </div>
+</div>
+
+<!-- ===== Calculation detail modal ===== -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="detailModalTitle">计算详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body" id="detailModalBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Delete-strategy modal (payer) ===== -->
+<div class="modal fade" id="payerDeleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">删除参还人</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <p>该参还人已有还款记录。请选择处理方式：</p>
+        <div class="form-check"><input type="radio" class="form-check-input" name="payerDelStrategy" value="merge" checked id="payerDelMerge"><label class="form-check-label" for="payerDelMerge">合并：累计本金按当前比例分给其他参还人</label></div>
+        <div class="form-check"><input type="radio" class="form-check-input" name="payerDelStrategy" value="delete" id="payerDelDel"><label class="form-check-label" for="payerDelDel">删除：清除其所有还款记录并重算</label></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-danger" id="payerDeleteConfirmBtn">确定删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Delete-strategy modal (loan) ===== -->
+<div class="modal fade" id="loanDeleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">删除贷款</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <p>该贷款已有还款记录。请选择处理方式：</p>
+        <div class="form-check"><input type="radio" class="form-check-input" name="loanDelStrategy" value="merge" checked id="loanDelMerge"><label class="form-check-label" for="loanDelMerge">合并到其他贷款：</label>
+          <select class="form-select form-select-sm mt-1" id="loanDelMergeTarget"></select>
+        </div>
+        <div class="form-check mt-2"><input type="radio" class="form-check-input" name="loanDelStrategy" value="delete" id="loanDelDel"><label class="form-check-label" for="loanDelDel">删除：清除所有相关还款记录并重算</label></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-danger" id="loanDeleteConfirmBtn">确定删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Edit month modal ===== -->
+<div class="modal fade" id="monthEditModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="monthEditTitle">修改月份</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body" id="monthEditBody"></div>
+      <div class="modal-footer">
+        <div class="me-auto small-muted" id="monthEditCascadeMsg"></div>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="monthEditSaveBtn">保存并重算</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============== CHANGELOG MODAL ============== -->
+<div class="modal fade" id="changelogModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">更新日志</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="changelogBody" data-testid="changelog-body">
+        加载中…
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="text-center small-muted my-4">
+  <span>共同还贷所有权计算器</span>
+  · <span data-testid="footer-version" id="footerVersion">v…</span>
+  · <a target="_blank" rel="noopener" data-testid="footer-repo-link" id="footerRepoLink" href="#">源代码</a>
+</footer>
+
+</div><!-- /app-container -->
+
+<script>
+// ====================== Helpers ======================
+const fmtPct = r => (r==null||isNaN(r)) ? '-' : (r*100).toFixed(2) + '%';
+const fmtCny = v => (v==null||isNaN(v)) ? '-' : Number(v).toFixed(2);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(method, url, body) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).error || msg; } catch(e) {}
+    throw new Error(msg);
+  }
+  const ct = r.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return r.json();
+  return r;
+}
+
+// State cache
+let STATE = null;
+
+async function loadState() {
+  STATE = await api('GET', '/api/state');
+  renderAll();
+}
+
+function renderAll() {
+  renderPayers();
+  renderDownpayment();
+  renderLoans();
+  renderMonthsTab();
+  renderSummary();
+}
+
+// ====================== Tabs ======================
+document.querySelectorAll('#mainTabs .nav-link').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('#mainTabs .nav-link').forEach(l => l.classList.remove('active'));
+    el.classList.add('active');
+    const tab = el.dataset.tab;
+    ['payers','loans','months','summary','forecast'].forEach(t => {
+      $('tab-'+t+'-pane').style.display = (t===tab) ? '' : 'none';
+    });
+  });
+});
+
+// ====================== Setup wizard ======================
+async function checkSetup() {
+  loadAbout().catch(() => {});
+  const cfg = await api('GET', '/api/config');
+  if (cfg.initialized) {
+    $('mainApp').style.display = '';
+    await loadState();
+  } else {
+    const m = new bootstrap.Modal($('setupModal'));
+    m.show();
+  }
+}
+
+// ====================== About / version / changelog ======================
+async function loadAbout() {
+  const info = await api('GET', '/api/about');
+  $('appVersionBadge').textContent = 'v' + info.version;
+  $('footerVersion').textContent = 'v' + info.version;
+  const link = $('repoLink');
+  link.href = info.repoUrl;
+  link.textContent = 'GitHub 仓库';
+  $('footerRepoLink').href = info.repoUrl;
+  const body = $('changelogBody');
+  if (window.marked && info.changelogMarkdown) {
+    body.innerHTML = marked.parse(info.changelogMarkdown);
+  } else {
+    const pre = document.createElement('pre');
+    pre.textContent = info.changelogMarkdown || '(暂无更新日志)';
+    body.innerHTML = '';
+    body.appendChild(pre);
+  }
+}
+
+$('setupDefaultBtn').addEventListener('click', () => {
+  $('setupDataPathInput').value = '~/LoanRatioData/data.json';
+});
+$('setupConfirmBtn').addEventListener('click', async () => {
+  const path = $('setupDataPathInput').value.trim() || '~/LoanRatioData/data.json';
+  try {
+    await api('POST', '/api/config', { dataPath: path });
+    bootstrap.Modal.getInstance($('setupModal')).hide();
+    $('mainApp').style.display = '';
+    await loadState();
+  } catch(e) { alert('配置失败：'+e.message); }
+});
+
+// ====================== Payers ======================
+function renderPayers() {
+  const container = $('payersList');
+  const payers = (STATE && STATE.payers) || [];
+  if (!payers.length) { container.innerHTML = '<div class="small-muted">暂无参还人</div>'; return; }
+  container.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>姓名</th><th>起始月份</th><th>操作</th></tr></thead><tbody>' +
+    payers.map(p => `<tr data-testid="payer-row-${esc(p.id)}">
+      <td>${esc(p.id)}</td>
+      <td><input class="form-control form-control-sm payer-name-edit" data-id="${esc(p.id)}" value="${esc(p.name)}"></td>
+      <td><input class="form-control form-control-sm payer-start-edit" data-id="${esc(p.id)}" value="${esc(p.startMonth||'')}" placeholder="YYYY-MM"></td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary payer-save-btn" data-id="${esc(p.id)}">保存</button>
+        <button class="btn btn-sm btn-outline-danger" data-testid="payer-delete-${esc(p.id)}" onclick="onPayerDelete('${esc(p.id)}')">删除</button>
+      </td>
+    </tr>`).join('') + '</tbody></table>';
+
+  container.querySelectorAll('.payer-save-btn').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.id;
+    const name = container.querySelector('.payer-name-edit[data-id="'+id+'"]').value.trim();
+    const startMonth = container.querySelector('.payer-start-edit[data-id="'+id+'"]').value.trim() || null;
+    try { await api('PATCH', '/api/payers/'+id, { name, startMonth }); await loadState(); }
+    catch(e) { alert('保存失败：'+e.message); }
+  }));
+}
+
+$('payerAddBtn').addEventListener('click', async () => {
+  const name = $('payerNameInput').value.trim();
+  if (!name) { alert('请输入姓名'); return; }
+  const startMonth = $('payerStartMonthInput').value.trim() || null;
+  try {
+    await api('POST', '/api/payers', { name, startMonth });
+    $('payerNameInput').value = ''; $('payerStartMonthInput').value = '';
+    await loadState();
+  } catch(e) { alert('添加失败：'+e.message); }
+});
+
+let pendingDeletePayerId = null;
+window.onPayerDelete = function(id) {
+  pendingDeletePayerId = id;
+  const hasHistory = (STATE.months || []).some(m =>
+    (m.payerPayments||[]).some(pp => pp.payerId === id)
+  );
+  if (!hasHistory) {
+    if (!confirm('确定删除该参还人？')) return;
+    api('DELETE', '/api/payers/'+id+'?strategy=delete').then(loadState).catch(e=>alert(e.message));
+  } else {
+    new bootstrap.Modal($('payerDeleteModal')).show();
+  }
+};
+$('payerDeleteConfirmBtn').addEventListener('click', async () => {
+  const strategy = document.querySelector('input[name=payerDelStrategy]:checked').value;
+  try {
+    await api('DELETE', '/api/payers/'+pendingDeletePayerId+'?strategy='+strategy);
+    bootstrap.Modal.getInstance($('payerDeleteModal')).hide();
+    await loadState();
+  } catch(e) { alert('删除失败：'+e.message); }
+});
+
+// ====================== Downpayment ======================
+function renderDownpayment() {
+  const wrap = $('downpaymentInputs');
+  const payers = (STATE && STATE.payers) || [];
+  const allowed = !(STATE.months && STATE.months.length);
+  const existing = (STATE.downpayment && STATE.downpayment.contributions) || [];
+  const map = {}; existing.forEach(c => map[c.payerId] = c.amount);
+  if (!payers.length) { wrap.innerHTML = '<div class="small-muted">请先添加参还人</div>'; }
+  else {
+    wrap.innerHTML = payers.map(p => `
+      <div class="row g-2 align-items-center mb-2">
+        <div class="col-md-3">${esc(p.name)}</div>
+        <div class="col-md-4"><input type="number" class="form-control form-control-sm"
+          data-testid="downpayment-input-${esc(p.id)}" data-id="${esc(p.id)}"
+          value="${map[p.id]!=null?map[p.id]:''}" placeholder="0" ${allowed?'':'disabled'}></div>
+      </div>`).join('');
+  }
+  $('downpaymentSaveBtn').disabled = !allowed || !payers.length;
+  if (!allowed) { $('downpaymentSaveBtn').title = '已有还款月份，不能修改首付'; }
+}
+
+$('downpaymentSaveBtn').addEventListener('click', async () => {
+  const inputs = $('downpaymentInputs').querySelectorAll('input[data-id]');
+  const contributions = [];
+  inputs.forEach(i => {
+    const v = parseFloat(i.value);
+    contributions.push({ payerId: i.dataset.id, amount: isNaN(v) ? 0 : v });
+  });
+  try {
+    await api('POST', '/api/months/downpayment', { contributions });
+    await loadState();
+    alert('首付已保存');
+  } catch(e) { alert('保存失败：'+e.message); }
+});
+
+// ====================== Loans ======================
+function renderLoans() {
+  const wrap = $('loansList');
+  const loans = (STATE && STATE.loans) || [];
+  if (!loans.length) { wrap.innerHTML = '<div class="small-muted">暂无贷款</div>'; return; }
+  wrap.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>名称</th><th>原始金额</th><th>剩余本金</th><th>操作</th></tr></thead><tbody>' +
+    loans.map(l => `<tr data-testid="loan-row-${esc(l.id)}">
+      <td>${esc(l.id)}</td>
+      <td><input class="form-control form-control-sm loan-name-edit" data-id="${esc(l.id)}" value="${esc(l.name)}"></td>
+      <td><input type="number" class="form-control form-control-sm loan-orig-edit" data-id="${esc(l.id)}" value="${l.originalAmount}"></td>
+      <td><input type="number" class="form-control form-control-sm loan-rem-edit" data-id="${esc(l.id)}" value="${l.remainingPrincipal}"></td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary loan-save-btn" data-id="${esc(l.id)}">保存</button>
+        <button class="btn btn-sm btn-outline-danger" data-testid="loan-delete-${esc(l.id)}" onclick="onLoanDelete('${esc(l.id)}')">删除</button>
+      </td>
+    </tr>`).join('') + '</tbody></table>';
+  wrap.querySelectorAll('.loan-save-btn').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.id;
+    const name = wrap.querySelector('.loan-name-edit[data-id="'+id+'"]').value.trim();
+    const originalAmount = parseFloat(wrap.querySelector('.loan-orig-edit[data-id="'+id+'"]').value);
+    const remainingPrincipal = parseFloat(wrap.querySelector('.loan-rem-edit[data-id="'+id+'"]').value);
+    try { await api('PATCH', '/api/loans/'+id, { name, originalAmount, remainingPrincipal }); await loadState(); }
+    catch(e) { alert('保存失败：'+e.message); }
+  }));
+}
+
+$('loanAddBtn').addEventListener('click', async () => {
+  const name = $('loanNameInput').value.trim();
+  const originalAmount = parseFloat($('loanOriginalInput').value);
+  const remainingPrincipal = parseFloat($('loanRemainingInput').value);
+  if (!name || isNaN(originalAmount) || isNaN(remainingPrincipal)) { alert('请完整填写'); return; }
+  try {
+    await api('POST', '/api/loans', { name, originalAmount, remainingPrincipal });
+    $('loanNameInput').value = ''; $('loanOriginalInput').value = ''; $('loanRemainingInput').value = '';
+    await loadState();
+  } catch(e) { alert('添加失败：'+e.message); }
+});
+
+let pendingDeleteLoanId = null;
+window.onLoanDelete = function(id) {
+  pendingDeleteLoanId = id;
+  const hasHistory = (STATE.months || []).some(m =>
+    (m.loanDetails||[]).some(ld => ld.loanId === id)
+  );
+  if (!hasHistory) {
+    if (!confirm('确定删除该贷款？')) return;
+    api('DELETE', '/api/loans/'+id+'?strategy=delete').then(loadState).catch(e=>alert(e.message));
+  } else {
+    const sel = $('loanDelMergeTarget'); sel.innerHTML = '';
+    STATE.loans.filter(l => l.id !== id).forEach(l => {
+      const o = document.createElement('option'); o.value = l.id; o.textContent = l.name; sel.appendChild(o);
+    });
+    new bootstrap.Modal($('loanDeleteModal')).show();
+  }
+};
+$('loanDeleteConfirmBtn').addEventListener('click', async () => {
+  const strategy = document.querySelector('input[name=loanDelStrategy]:checked').value;
+  let url = '/api/loans/'+pendingDeleteLoanId+'?strategy='+strategy;
+  if (strategy === 'merge') {
+    const tgt = $('loanDelMergeTarget').value;
+    if (!tgt) { alert('请选择合并目标'); return; }
+    url += '&targetId='+encodeURIComponent(tgt);
+  }
+  try {
+    await api('DELETE', url);
+    bootstrap.Modal.getInstance($('loanDeleteModal')).hide();
+    await loadState();
+  } catch(e) { alert('删除失败：'+e.message); }
+});
+
+// ====================== Months ======================
+function nextExpectedMonth() {
+  const months = (STATE && STATE.months) || [];
+  if (!months.length) return '';
+  const last = months[months.length-1].yearMonth;
+  if (last === '0000-00') return '';
+  const [y,m] = last.split('-').map(Number);
+  let ny = y, nm = m+1; if (nm > 12) { nm = 1; ny += 1; }
+  return `${ny}-${String(nm).padStart(2,'0')}`;
+}
+
+function renderMonthsTab() {
+  const payers = (STATE && STATE.payers) || [];
+  const loans  = (STATE && STATE.loans) || [];
+  const gate = !payers.length || !loans.length;
+  $('monthsGateMsg').style.display = gate ? '' : 'none';
+  $('monthCreateBtn').disabled = gate;
+  document.querySelectorAll('#monthAutoFields input, #monthManualFields input, #monthYearMonthInput, #monthModeAuto, #monthModeManual')
+    .forEach(i => { if (i.id !== 'monthCreateBtn') i.disabled = gate; });
+
+  const expected = nextExpectedMonth();
+  $('monthHint').textContent = expected ? `下一应录入月份：${expected}（必须连续）` : '尚未录入任何月份，可从首付("0000-00")或第一个月开始';
+  if (expected && !$('monthYearMonthInput').value) $('monthYearMonthInput').value = expected;
+
+  // loan fields
+  $('monthLoanFields').innerHTML = loans.map(l => `
+    <div class="row g-2 mb-1 align-items-center">
+      <div class="col-md-3">${esc(l.name)}</div>
+      <div class="col-md-4"><input type="number" class="form-control form-control-sm" placeholder="本月利息"
+        data-testid="month-loan-interest-${esc(l.id)}" data-loanid="${esc(l.id)}" data-field="interest"></div>
+      <div class="col-md-4"><input type="number" class="form-control form-control-sm" placeholder="本月本金"
+        data-testid="month-loan-principal-${esc(l.id)}" data-loanid="${esc(l.id)}" data-field="principal"></div>
+    </div>`).join('');
+
+  // payer payment fields
+  $('monthPayerPaymentFields').innerHTML = payers.map(p => `
+    <div class="row g-2 mb-1 align-items-center">
+      <div class="col-md-3">${esc(p.name)}</div>
+      <div class="col-md-6"><input type="number" class="form-control form-control-sm" placeholder="本月还款额"
+        data-testid="month-payer-payment-${esc(p.id)}" data-payerid="${esc(p.id)}"></div>
+    </div>`).join('');
+
+  // manual ratio fields
+  $('monthManualRatioFields').innerHTML = payers.map(p => `
+    <div class="row g-2 mb-1 align-items-center">
+      <div class="col-md-3">${esc(p.name)}</div>
+      <div class="col-md-6"><input type="number" step="0.0001" class="form-control form-control-sm" placeholder="如 0.55"
+        data-testid="month-manual-ratio-${esc(p.id)}" data-payerid="${esc(p.id)}"></div>
+    </div>`).join('');
+
+  renderMonthsList();
+}
+
+document.querySelectorAll('input[name=monthMode]').forEach(r => r.addEventListener('change', () => {
+  const mode = document.querySelector('input[name=monthMode]:checked').value;
+  $('monthAutoFields').style.display = mode==='auto' ? '' : 'none';
+  $('monthManualFields').style.display = mode==='manual' ? '' : 'none';
+}));
+
+$('monthCreateBtn').addEventListener('click', async () => {
+  const yearMonth = $('monthYearMonthInput').value.trim();
+  if (!yearMonth) { alert('请填写年月'); return; }
+  const mode = document.querySelector('input[name=monthMode]:checked').value;
+  const loanDetails = [];
+  $('monthLoanFields').querySelectorAll('input[data-loanid]').forEach(i => {
+    const id = i.dataset.loanid;
+    let row = loanDetails.find(r => r.loanId === id);
+    if (!row) { row = { loanId:id, interest:0, principal:0 }; loanDetails.push(row); }
+    const v = parseFloat(i.value); row[i.dataset.field] = isNaN(v)?0:v;
+  });
+  const payerPayments = [];
+  $('monthPayerPaymentFields').querySelectorAll('input[data-payerid]').forEach(i => {
+    const v = parseFloat(i.value); payerPayments.push({ payerId: i.dataset.payerid, amount: isNaN(v)?0:v });
+  });
+  const body = { yearMonth, mode, loanDetails, payerPayments };
+  if (mode === 'manual') {
+    const manualRatios = {};
+    let sum = 0;
+    $('monthManualRatioFields').querySelectorAll('input[data-payerid]').forEach(i => {
+      const v = parseFloat(i.value)||0; manualRatios[i.dataset.payerid] = v; sum += v;
+    });
+    if (Math.abs(sum - 1) > 1e-6) { alert('手动比例总和必须为 1.0（当前 '+sum.toFixed(4)+'）'); return; }
+    body.manualRatios = manualRatios;
+  }
+  try {
+    await api('POST', '/api/months', body);
+    // reset inputs
+    document.querySelectorAll('#monthAutoFields input, #monthManualFields input').forEach(i => i.value='');
+    $('monthYearMonthInput').value = '';
+    await loadState();
+  } catch(e) { alert('创建失败：'+e.message); }
+});
+
+function payerName(pid) {
+  const p = (STATE.payers||[]).find(x=>x.id===pid); return p?p.name:pid;
+}
+
+function renderMonthsList() {
+  const months = (STATE && STATE.months) || [];
+  const payers = (STATE && STATE.payers) || [];
+  const wrap = $('monthsList');
+  // dropdown
+  const sel = $('monthJumpSelect');
+  sel.innerHTML = '<option value="">-- 选择 --</option>' +
+    months.map(m => `<option value="${esc(m.yearMonth)}">${esc(m.yearMonth)}</option>`).join('');
+  sel.onchange = () => {
+    const ym = sel.value; if (!ym) return;
+    const row = document.querySelector(`[data-testid="month-row-${ym}"]`);
+    if (row) row.scrollIntoView({behavior:'smooth', block:'center'});
+  };
+
+  if (!months.length) { wrap.innerHTML = '<div class="small-muted">暂无月份</div>'; return; }
+
+  let html = '<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr>' +
+    '<th>月份</th><th>模式</th>' +
+    payers.map(p => `<th>${esc(p.name)} 净本金</th><th>${esc(p.name)} 累计</th><th>${esc(p.name)} 利息</th><th>${esc(p.name)} 比例</th>`).join('') +
+    '<th>操作</th></tr></thead><tbody>';
+  months.forEach(m => {
+    const c = m.computed || { perPayer: {} };
+    html += `<tr data-testid="month-row-${esc(m.yearMonth)}">
+      <td>${esc(m.yearMonth)}</td>
+      <td>${m.mode==='manual' ? '<span class="manual-badge">手动</span>' : '<span class="auto-badge">自动</span>'}</td>`;
+    payers.forEach(p => {
+      const pp = (c.perPayer||{})[p.id] || {};
+      const adj = pp.adjPrincipal!=null ? fmtCny(pp.adjPrincipal) : '-';
+      const cum = pp.cumulativePrincipal!=null ? fmtCny(pp.cumulativePrincipal) : '-';
+      const iShare = pp.interestShare!=null ? fmtCny(pp.interestShare) : '-';
+      const ratio = pp.ratio!=null ? fmtPct(pp.ratio) : '-';
+      html += `<td><span class="clickable ratio-cell" data-testid="month-adj-principal-${esc(m.yearMonth)}-${esc(p.id)}"
+                 onclick="openDetail('${esc(m.yearMonth)}')">${adj}</span></td>
+               <td class="ratio-cell" data-testid="month-cumulative-${esc(m.yearMonth)}-${esc(p.id)}">${cum}</td>
+               <td class="ratio-cell" data-testid="month-interest-share-${esc(m.yearMonth)}-${esc(p.id)}">${iShare}</td>
+               <td class="ratio-cell" data-testid="month-ratio-${esc(m.yearMonth)}-${esc(p.id)}">${ratio}</td>`;
+    });
+    html += `<td>
+      <button class="btn btn-sm btn-outline-info" data-testid="month-detail-${esc(m.yearMonth)}" onclick="openDetail('${esc(m.yearMonth)}')">详情</button>
+      <button class="btn btn-sm btn-outline-primary" onclick="openMonthEdit('${esc(m.yearMonth)}')">修改</button>
+    </td></tr>`;
+  });
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+
+window.openDetail = async function(ym) {
+  try {
+    const detail = await api('GET', '/api/months/'+ym+'/detail');
+    $('detailModalTitle').textContent = `${ym} 计算详情`;
+    const payers = STATE.payers || [];
+    let html = '';
+    if (detail.readOnly) html += '<div class="read-only-banner">只读视图（历史月份）</div>';
+    html += `<p><b>模式：</b>${detail.mode==='manual'?'手动':'自动'}</p>`;
+    html += `<p><b>本月总利息：</b>${fmtCny(detail.totalInterest)}</p>`;
+    if (detail.steps && detail.steps.length) {
+      html += '<h6>计算步骤</h6><div class="formula">'+detail.steps.map(s=>esc(s)).join('\n')+'</div>';
+    }
+    html += '<h6 class="mt-3">每位参还人</h6><table class="table table-sm"><thead><tr><th>姓名</th><th>还款</th><th>承担利息</th><th>原始净本金</th><th>调整后净本金</th><th>累计本金</th><th>本月比例</th></tr></thead><tbody>';
+    (payers).forEach(p => {
+      const r = (detail.perPayer||{})[p.id] || {};
+      html += `<tr><td>${esc(p.name)}</td>
+        <td>${fmtCny(r.payment)}</td>
+        <td>${fmtCny(r.interestShare)}</td>
+        <td>${fmtCny(r.rawPrincipal)}</td>
+        <td>${fmtCny(r.adjPrincipal)}</td>
+        <td>${fmtCny(r.cumulativePrincipal)}</td>
+        <td>${fmtPct(r.ratio)}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    if (detail.redistribution && detail.redistribution.length) {
+      html += '<h6>负本金再分配</h6><div class="formula">'+detail.redistribution.map(s=>esc(s)).join('\n')+'</div>';
+    }
+    if (detail.formula) {
+      html += '<h6 class="mt-3">公式</h6><div class="formula">'+esc(detail.formula)+'</div>';
+    }
+    $('detailModalBody').innerHTML = html;
+    new bootstrap.Modal($('detailModal')).show();
+  } catch(e) { alert('加载失败：'+e.message); }
+};
+
+window.openMonthEdit = function(ym) {
+  const m = (STATE.months||[]).find(x => x.yearMonth === ym);
+  if (!m) return;
+  const idx = (STATE.months||[]).findIndex(x => x.yearMonth === ym);
+  const cascade = (STATE.months.length - 1) - idx;
+  $('monthEditTitle').textContent = `修改 ${ym}`;
+  $('monthEditCascadeMsg').textContent = cascade>0 ? `修改后将重算 ${cascade} 个后续月份` : '该月为最新月份';
+  const payers = STATE.payers || [];
+  const loans = STATE.loans || [];
+  const ldMap = {}; (m.loanDetails||[]).forEach(d => ldMap[d.loanId]=d);
+  const ppMap = {}; (m.payerPayments||[]).forEach(d => ppMap[d.payerId]=d.amount);
+  const mrMap = m.manualRatios || {};
+  let html = `<div class="mb-2">
+    <label>模式：</label>
+    <select class="form-select form-select-sm w-auto d-inline-block" id="meMode">
+      <option value="auto" ${m.mode==='auto'?'selected':''}>自动</option>
+      <option value="manual" ${m.mode==='manual'?'selected':''}>手动</option>
+    </select>
+  </div>`;
+  html += '<h6>各贷款利息/本金</h6>';
+  loans.forEach(l => {
+    const d = ldMap[l.id] || { interest:0, principal:0 };
+    html += `<div class="row g-2 mb-1"><div class="col-md-3">${esc(l.name)}</div>
+      <div class="col-md-4"><input type="number" class="form-control form-control-sm me-loan-int" data-id="${esc(l.id)}" value="${d.interest}"></div>
+      <div class="col-md-4"><input type="number" class="form-control form-control-sm me-loan-prin" data-id="${esc(l.id)}" value="${d.principal}"></div>
+    </div>`;
+  });
+  html += '<h6 class="mt-2">各参还人还款额</h6>';
+  payers.forEach(p => {
+    html += `<div class="row g-2 mb-1"><div class="col-md-3">${esc(p.name)}</div>
+      <div class="col-md-6"><input type="number" class="form-control form-control-sm me-pay" data-id="${esc(p.id)}" value="${ppMap[p.id]||0}"></div>
+    </div>`;
+  });
+  html += '<h6 class="mt-2">手动比例（仅手动模式）</h6>';
+  payers.forEach(p => {
+    html += `<div class="row g-2 mb-1"><div class="col-md-3">${esc(p.name)}</div>
+      <div class="col-md-6"><input type="number" step="0.0001" class="form-control form-control-sm me-mr" data-id="${esc(p.id)}" value="${mrMap[p.id]!=null?mrMap[p.id]:''}"></div>
+    </div>`;
+  });
+  $('monthEditBody').innerHTML = html;
+  $('monthEditSaveBtn').onclick = async () => {
+    if (cascade>0 && !confirm(`将重算 ${cascade} 个后续月份。继续？`)) return;
+    const mode = $('meMode').value;
+    const loanDetails = loans.map(l => ({
+      loanId: l.id,
+      interest: parseFloat($('monthEditBody').querySelector('.me-loan-int[data-id="'+l.id+'"]').value)||0,
+      principal: parseFloat($('monthEditBody').querySelector('.me-loan-prin[data-id="'+l.id+'"]').value)||0
+    }));
+    const payerPayments = payers.map(p => ({
+      payerId: p.id,
+      amount: parseFloat($('monthEditBody').querySelector('.me-pay[data-id="'+p.id+'"]').value)||0
+    }));
+    const body = { mode, loanDetails, payerPayments };
+    if (mode === 'manual') {
+      const manualRatios = {}; let s = 0;
+      payers.forEach(p => {
+        const v = parseFloat($('monthEditBody').querySelector('.me-mr[data-id="'+p.id+'"]').value)||0;
+        manualRatios[p.id] = v; s += v;
+      });
+      if (Math.abs(s-1) > 1e-6) { alert('手动比例总和必须为 1.0（当前 '+s.toFixed(4)+'）'); return; }
+      body.manualRatios = manualRatios;
+    }
+    try {
+      await api('PATCH', '/api/months/'+ym, body);
+      bootstrap.Modal.getInstance($('monthEditModal')).hide();
+      await loadState();
+    } catch(e) { alert('保存失败：'+e.message); }
+  };
+  new bootstrap.Modal($('monthEditModal')).show();
+};
+
+// ====================== Summary ======================
+async function renderSummary() {
+  let summary;
+  try { summary = await api('GET', '/api/summary'); }
+  catch(e) { return; }
+  const payers = summary.payers || [];
+  const loans  = summary.loans || [];
+  const months = summary.months || [];
+
+  $('summaryPayers').innerHTML = payers.length ? '<table class="table table-sm"><thead><tr><th>姓名</th><th>累计净本金</th><th>当前权益</th></tr></thead><tbody>' +
+    payers.map(p => `<tr>
+      <td>${esc(p.name)}</td>
+      <td class="ratio-cell" data-testid="summary-payer-cp-${esc(p.id)}">${fmtCny(p.cumulativePrincipal)}</td>
+      <td class="ratio-cell" data-testid="summary-payer-ratio-${esc(p.id)}">${fmtPct(p.currentRatio)}</td>
+    </tr>`).join('') + '</tbody></table>' : '<div class="small-muted">暂无数据</div>';
+
+  $('summaryLoans').innerHTML = loans.length ? '<table class="table table-sm"><thead><tr><th>名称</th><th>原始</th><th>剩余本金</th></tr></thead><tbody>' +
+    loans.map(l => `<tr>
+      <td>${esc(l.name)}</td>
+      <td class="ratio-cell">${fmtCny(l.originalAmount)}</td>
+      <td class="ratio-cell" data-testid="summary-loan-remaining-${esc(l.id)}">${fmtCny(l.remainingPrincipal)}</td>
+    </tr>`).join('') + '</tbody></table>' : '<div class="small-muted">暂无数据</div>';
+
+  let h = '<thead><tr><th>月份</th><th>模式</th>' + payers.map(p=>`<th>${esc(p.name)}</th>`).join('') + '</tr></thead><tbody>';
+  months.forEach(m => {
+    h += `<tr><td>${esc(m.yearMonth)}</td><td>${m.mode==='manual'?'手动':'自动'}</td>`;
+    payers.forEach(p => {
+      const r = (m.ratios||{})[p.id];
+      h += `<td class="ratio-cell">${r!=null?fmtPct(r):'-'}</td>`;
+    });
+    h += '</tr>';
+  });
+  h += '</tbody>';
+  $('summaryHistoryTable').innerHTML = h;
+}
+
+// ====================== Forecast ======================
+let forecastChart = null;
+$('forecastRunBtn').addEventListener('click', async () => {
+  const windowMonths = parseInt($('forecastWindowInput').value)||3;
+  const horizonMonths = parseInt($('forecastHorizonInput').value)||12;
+  try {
+    const res = await api('POST', '/api/forecast', { windowMonths, horizonMonths });
+    $('forecastPayoffMonth').textContent = res.payoffMonth || '未预测出';
+    const payers = STATE.payers || [];
+    // Final ratio per payer
+    const series = res.series || {};
+    const labels = res.months || [];
+    $('forecastFinalRatios').innerHTML = '<h6>预测期末权益比例</h6>' + payers.map(p => {
+      const arr = series[p.id] || [];
+      const finalR = arr.length ? arr[arr.length-1] : null;
+      return `<div>${esc(p.name)}：<span class="ratio-cell" data-testid="forecast-final-ratio-${esc(p.id)}">${finalR!=null?fmtPct(finalR):'-'}</span></div>`;
+    }).join('');
+
+    if (forecastChart) forecastChart.destroy();
+    const ctx = $('forecastChart').getContext('2d');
+    const colors = ['#0d6efd','#dc3545','#198754','#ffc107','#6f42c1','#20c997','#fd7e14'];
+    const datasets = payers.map((p, idx) => ({
+      label: p.name,
+      data: (series[p.id]||[]).map(v => v*100),
+      borderColor: colors[idx%colors.length], fill:false, tension:0.2
+    }));
+    forecastChart = new Chart(ctx, {
+      type:'line', data:{ labels, datasets },
+      options:{ responsive:true, scales:{ y:{ title:{display:true,text:'权益比例 %'} } } }
+    });
+  } catch(e) { alert('预测失败：'+e.message); }
+});
+
+// ====================== Boot ======================
+document.addEventListener('DOMContentLoaded', () => {
+  checkSetup().catch(e => alert('启动失败：'+e.message));
+});
+</script>
+</body>
+</html>
