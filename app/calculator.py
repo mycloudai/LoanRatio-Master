@@ -120,6 +120,11 @@ def _compute_auto_month(
                 adj[pid] = raw[pid] + (prev_ratio.get(pid, 0.0) / denom) * neg_total
         for pid in s_minus:
             adj[pid] = 0.0
+    elif neg_total > 0 and not s_plus:
+        # All active payers paid less than their interest share; no one can absorb the
+        # deficit.  Zero out every adj so CP is not eroded into negative territory.
+        for pid in active_ids:
+            adj[pid] = 0.0
     else:
         for pid in active_ids:
             adj[pid] = raw[pid]

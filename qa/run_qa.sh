@@ -82,6 +82,12 @@ cleanup() {
     kill "$BACKEND_PID" 2>/dev/null || true
     wait "$BACKEND_PID" 2>/dev/null || true
   fi
+  # Kill any orphaned child still holding the port (e.g. python child of uv)
+  local port_pid
+  port_pid=$(lsof -ti:"$PORT" 2>/dev/null || true)
+  if [[ -n "$port_pid" ]]; then
+    kill "$port_pid" 2>/dev/null || true
+  fi
   playwright-cli -s="$SESSION" close >/dev/null 2>&1 || true
   rm -rf "$TMPHOME"
 }
@@ -598,7 +604,8 @@ assert_near "单人 interestShare 10" "$(api_computed 0 p1 interestShare)" "10"
 # =====================================================================
 # 23. 边界: 付款不足以覆盖利息 (全员欠款)
 #   首付 50/50, 利息 1000 本金 0, 付款 200/300 (都 < 500 利息份额)
-#   raw: p1=200-500=-300, p2=300-500=-200; 无正贡献者 -> 全部归零; CP 不变
+#   raw: p1=200-500=-300, p2=300-500=-200; 无正贡献者
+#   -> adj 全部归零 (防止 CP 被侵蚀为负), CP 保持首付值不变
 # =====================================================================
 section "23. 边界: 全员欠款"
 load_state '{
@@ -609,10 +616,10 @@ load_state '{
     "loanDetails":[{"loanId":"l1","interest":1000,"principal":0}],
     "payerPayments":[{"payerId":"p1","amount":200},{"payerId":"p2","amount":300}]}]
 }'
-assert_near "全员欠款 p1 adj = -300"         "$(api_computed 0 p1 adjPrincipal)" "-300"
-assert_near "全员欠款 p2 adj = -200"         "$(api_computed 0 p2 adjPrincipal)" "-200"
-assert_near "全员欠款 p1 累计 = 200"         "$(api_computed 0 p1 cumulativePrincipal)" "200"
-assert_near "全员欠款 p2 累计 = 300"         "$(api_computed 0 p2 cumulativePrincipal)" "300"
+assert_near "全员欠款 p1 adj = 0 (归零)"     "$(api_computed 0 p1 adjPrincipal)" "0"
+assert_near "全员欠款 p2 adj = 0 (归零)"     "$(api_computed 0 p2 adjPrincipal)" "0"
+assert_near "全员欠款 p1 累计 = 500 (不变)"  "$(api_computed 0 p1 cumulativePrincipal)" "500"
+assert_near "全员欠款 p2 累计 = 500 (不变)"  "$(api_computed 0 p2 cumulativePrincipal)" "500"
 
 # =====================================================================
 # 24. 边界: yearMonth 非法格式

@@ -79,7 +79,7 @@ $$p_i^{\text{raw}}(t) = \text{pay}_i(t) - \text{interestShare}_i(t)$$
 
 $$\text{负贡献总额} = \sum_{j \in S^-} |p_j^{\text{raw}}(t)|$$
 
-$$p_i^{\text{adj}}(t) = p_i^{\text{raw}}(t) - \frac{r_i(t-1)}{\sum_{k \in S^+} r_k(t-1)} \times \text{负贡献总额}, \quad i \in S^+$$
+$$p_i^{\text{adj}}(t) = p_i^{\text{raw}}(t) + \frac{r_i(t-1)}{\sum_{k \in S^+} r_k(t-1)} \times \text{负贡献总额}, \quad i \in S^+$$
 
 $$p_j^{\text{adj}}(t) = 0, \quad j \in S^-$$
 

@@ -6,25 +6,134 @@
 <title>共同还贷所有权计算器</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
   integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
   integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
   integrity="sha384-y1IFGbY2eSvHwoLaqjTvHsCe/EbTGtRcOMxZBlR2/CbY4qZkPEhpqzBSJ4IAW0bL" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <style>
-  body { background:#f6f8fa; }
-  .app-container { max-width: 1200px; margin: 0 auto; padding: 12px; }
-  .nav-tabs .nav-link { cursor: pointer; }
-  .clickable { color:#0d6efd; cursor:pointer; text-decoration:underline; }
-  .small-muted { color:#6c757d; font-size:0.85em; }
-  .table-sm td, .table-sm th { padding: 0.35rem; }
-  .formula { font-family: 'Courier New', monospace; background:#f1f3f5; padding:6px; border-radius:4px; white-space:pre-wrap; }
-  .ratio-cell { font-variant-numeric: tabular-nums; }
-  .manual-badge { background:#ffc107; color:#212529; padding:1px 6px; border-radius:3px; font-size:0.75em; }
-  .auto-badge { background:#198754; color:#fff; padding:1px 6px; border-radius:3px; font-size:0.75em; }
-  .read-only-banner { background:#fff3cd; padding:6px; border-radius:4px; margin-bottom:8px; }
+  :root {
+    --lr-primary: #2563eb;
+    --lr-primary-light: #eff6ff;
+    --lr-surface: #ffffff;
+    --lr-bg: #f0f4f8;
+    --lr-border: #e2e8f0;
+    --lr-text: #1e293b;
+    --lr-text-muted: #64748b;
+    --lr-success: #16a34a;
+    --lr-warning: #eab308;
+    --lr-danger: #dc2626;
+  }
+  body { background: var(--lr-bg); color: var(--lr-text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  .app-container { max-width: 1200px; margin: 0 auto; padding: 16px 20px; }
+
+  /* Header */
+  .app-header {
+    background: linear-gradient(135deg, var(--lr-primary) 0%, #1d4ed8 100%);
+    color: #fff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  }
+  .app-header h3 { font-weight: 700; letter-spacing: -0.02em; }
+  .app-header .badge { background: rgba(255,255,255,0.2) !important; font-weight: 500; }
+  .app-header .btn { border-color: rgba(255,255,255,0.4); color: #fff; }
+  .app-header .btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.6); }
+
+  /* Tabs */
+  .nav-tabs { border-bottom: 2px solid var(--lr-border); gap: 4px; }
+  .nav-tabs .nav-link {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px 8px 0 0;
+    padding: 10px 18px;
+    font-weight: 500;
+    color: var(--lr-text-muted);
+    transition: all 0.2s ease;
+  }
+  .nav-tabs .nav-link:hover { color: var(--lr-primary); background: var(--lr-primary-light); }
+  .nav-tabs .nav-link.active {
+    color: var(--lr-primary);
+    background: var(--lr-surface);
+    border-bottom: 3px solid var(--lr-primary);
+    margin-bottom: -2px;
+  }
+  .nav-tabs .nav-link .bi { margin-right: 6px; }
+
+  /* Cards */
+  .card {
+    border: 1px solid var(--lr-border);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: box-shadow 0.2s ease;
+  }
+  .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+  .card-body h6 { color: var(--lr-text); font-weight: 600; margin-bottom: 12px; }
+
+  /* Tables */
+  .table { --bs-table-hover-bg: var(--lr-primary-light); }
+  .table thead th {
+    background: #f8fafc;
+    border-bottom: 2px solid var(--lr-border);
+    font-weight: 600;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--lr-text-muted);
+    white-space: nowrap;
+  }
+  .table-sm td, .table-sm th { padding: 0.5rem 0.6rem; }
+  .table-striped > tbody > tr:nth-of-type(odd) > * { background-color: #fafbfc; }
+  .table > tbody > tr { transition: background 0.15s ease; }
+  .table > tbody > tr:hover > * { background-color: var(--lr-primary-light) !important; }
+
+  /* Clickable & badges */
+  .clickable { color: var(--lr-primary); cursor: pointer; text-decoration: none; font-weight: 500; }
+  .clickable:hover { text-decoration: underline; }
+  .small-muted { color: var(--lr-text-muted); font-size: 0.85em; }
+  .ratio-cell { font-variant-numeric: tabular-nums; font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; font-size: 0.9em; }
+  .formula { font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; background: #f1f5f9; padding: 12px; border-radius: 8px; white-space: pre-wrap; border: 1px solid var(--lr-border); font-size: 0.9em; }
+  .manual-badge { background: var(--lr-warning); color: #422006; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: 600; }
+  .auto-badge { background: var(--lr-success); color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: 600; }
+  .read-only-banner { background: #fef3c7; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #fde68a; }
+
+  /* Buttons */
+  .btn { border-radius: 6px; font-weight: 500; }
+  .btn-primary { background: var(--lr-primary); border-color: var(--lr-primary); }
+  .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+
+  /* Forms */
+  .form-control, .form-select { border-radius: 6px; border-color: var(--lr-border); }
+  .form-control:focus, .form-select:focus { border-color: var(--lr-primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+
+  /* Modals */
+  .modal-content { border-radius: 12px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+  .modal-header { border-bottom-color: var(--lr-border); }
+  .modal-footer { border-top-color: var(--lr-border); }
+
+  /* Footer */
+  .app-footer {
+    border-top: 1px solid var(--lr-border);
+    padding-top: 16px;
+    margin-top: 32px;
+  }
+  .app-footer a { color: var(--lr-primary); text-decoration: none; }
+  .app-footer a:hover { text-decoration: underline; }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 24px; color: var(--lr-text-muted); }
+  .empty-state .bi { font-size: 2em; display: block; margin-bottom: 8px; opacity: 0.4; }
+
+  /* Alerts */
+  .alert { border-radius: 8px; }
+
   @media (max-width: 576px) {
-    .nav-tabs .nav-link { font-size: 0.85em; padding: 0.4rem 0.6rem; }
+    .nav-tabs .nav-link { font-size: 0.82em; padding: 8px 10px; }
+    .app-header { padding: 14px 16px; border-radius: 8px; }
+    .app-header h3 { font-size: 1.15em; }
+    .card { border-radius: 8px; }
   }
 </style>
 </head>
@@ -55,25 +164,25 @@
 
 <!-- ============== MAIN UI ============== -->
 <div id="mainApp" style="display:none;">
-  <div class="d-flex flex-wrap align-items-center justify-content-between my-3 gap-2">
+  <div class="app-header d-flex flex-wrap align-items-center justify-content-between gap-2">
     <div class="d-flex align-items-center gap-2">
-      <h3 class="mb-0">共同还贷所有权计算器</h3>
-      <span class="badge bg-secondary" data-testid="app-version" id="appVersionBadge">v…</span>
+      <h3 class="mb-0"><i class="bi bi-calculator-fill me-2"></i>共同还贷所有权计算器</h3>
+      <span class="badge" data-testid="app-version" id="appVersionBadge">v…</span>
     </div>
     <div class="d-flex align-items-center gap-2">
       <a id="repoLink" data-testid="repo-link" target="_blank" rel="noopener"
-         class="btn btn-outline-dark btn-sm" href="#">GitHub 仓库</a>
-      <button class="btn btn-outline-primary btn-sm" data-testid="changelog-btn"
-              id="changelogBtn" data-bs-toggle="modal" data-bs-target="#changelogModal">更新日志</button>
+         class="btn btn-outline-light btn-sm" href="#"><i class="bi bi-github me-1"></i>GitHub 仓库</a>
+      <button class="btn btn-outline-light btn-sm" data-testid="changelog-btn"
+              id="changelogBtn" data-bs-toggle="modal" data-bs-target="#changelogModal"><i class="bi bi-journal-text me-1"></i>更新日志</button>
     </div>
   </div>
 
   <ul class="nav nav-tabs mb-3" id="mainTabs">
-    <li class="nav-item"><a class="nav-link active" data-tab="payers" data-testid="tab-payers">参还人</a></li>
-    <li class="nav-item"><a class="nav-link" data-tab="loans" data-testid="tab-loans">贷款</a></li>
-    <li class="nav-item"><a class="nav-link" data-tab="months" data-testid="tab-months">月份</a></li>
-    <li class="nav-item"><a class="nav-link" data-tab="summary" data-testid="tab-summary">汇总</a></li>
-    <li class="nav-item"><a class="nav-link" data-tab="forecast" data-testid="tab-forecast">预测</a></li>
+    <li class="nav-item"><a class="nav-link active" data-tab="payers" data-testid="tab-payers"><i class="bi bi-people-fill"></i>参还人</a></li>
+    <li class="nav-item"><a class="nav-link" data-tab="loans" data-testid="tab-loans"><i class="bi bi-bank2"></i>贷款</a></li>
+    <li class="nav-item"><a class="nav-link" data-tab="months" data-testid="tab-months"><i class="bi bi-calendar3"></i>月份</a></li>
+    <li class="nav-item"><a class="nav-link" data-tab="summary" data-testid="tab-summary"><i class="bi bi-pie-chart-fill"></i>汇总</a></li>
+    <li class="nav-item"><a class="nav-link" data-tab="forecast" data-testid="tab-forecast"><i class="bi bi-graph-up-arrow"></i>预测</a></li>
   </ul>
 
   <!-- ===== Payers tab ===== -->
@@ -300,10 +409,10 @@
   </div>
 </div>
 
-<footer class="text-center small-muted my-4">
-  <span>共同还贷所有权计算器</span>
+<footer class="text-center small-muted app-footer my-4">
+  <span><i class="bi bi-calculator me-1"></i>共同还贷所有权计算器</span>
   · <span data-testid="footer-version" id="footerVersion">v…</span>
-  · <a target="_blank" rel="noopener" data-testid="footer-repo-link" id="footerRepoLink" href="#">源代码</a>
+  · <a target="_blank" rel="noopener" data-testid="footer-repo-link" id="footerRepoLink" href="#"><i class="bi bi-github me-1"></i>源代码</a>
 </footer>
 
 </div><!-- /app-container -->
@@ -407,7 +516,7 @@ $('setupConfirmBtn').addEventListener('click', async () => {
 function renderPayers() {
   const container = $('payersList');
   const payers = (STATE && STATE.payers) || [];
-  if (!payers.length) { container.innerHTML = '<div class="small-muted">暂无参还人</div>'; return; }
+  if (!payers.length) { container.innerHTML = '<div class="empty-state"><i class="bi bi-people"></i>暂无参还人，请先添加</div>'; return; }
   container.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>姓名</th><th>起始月份</th><th>操作</th></tr></thead><tbody>' +
     payers.map(p => `<tr data-testid="payer-row-${esc(p.id)}">
       <td>${esc(p.id)}</td>
@@ -500,7 +609,7 @@ $('downpaymentSaveBtn').addEventListener('click', async () => {
 function renderLoans() {
   const wrap = $('loansList');
   const loans = (STATE && STATE.loans) || [];
-  if (!loans.length) { wrap.innerHTML = '<div class="small-muted">暂无贷款</div>'; return; }
+  if (!loans.length) { wrap.innerHTML = '<div class="empty-state"><i class="bi bi-bank"></i>暂无贷款，请先添加</div>'; return; }
   wrap.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>名称</th><th>原始金额</th><th>剩余本金</th><th>操作</th></tr></thead><tbody>' +
     loans.map(l => `<tr data-testid="loan-row-${esc(l.id)}">
       <td>${esc(l.id)}</td>
@@ -677,9 +786,9 @@ function renderMonthsList() {
     if (row) row.scrollIntoView({behavior:'smooth', block:'center'});
   };
 
-  if (!months.length) { wrap.innerHTML = '<div class="small-muted">暂无月份</div>'; return; }
+  if (!months.length) { wrap.innerHTML = '<div class="empty-state"><i class="bi bi-calendar-x"></i>暂无月份记录</div>'; return; }
 
-  let html = '<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr>' +
+  let html = '<div class="table-responsive"><table class="table table-sm table-striped align-middle"><thead><tr>' +
     '<th>月份</th><th>模式</th>' +
     payers.map(p => `<th>${esc(p.name)} 净本金</th><th>${esc(p.name)} 累计</th><th>${esc(p.name)} 利息</th><th>${esc(p.name)} 比例</th>`).join('') +
     '<th>操作</th></tr></thead><tbody>';
@@ -824,19 +933,19 @@ async function renderSummary() {
   const loans  = summary.loans || [];
   const months = summary.months || [];
 
-  $('summaryPayers').innerHTML = payers.length ? '<table class="table table-sm"><thead><tr><th>姓名</th><th>累计净本金</th><th>当前权益</th></tr></thead><tbody>' +
+  $('summaryPayers').innerHTML = payers.length ? '<table class="table table-sm table-striped"><thead><tr><th>姓名</th><th>累计净本金</th><th>当前权益</th></tr></thead><tbody>' +
     payers.map(p => `<tr>
       <td>${esc(p.name)}</td>
       <td class="ratio-cell" data-testid="summary-payer-cp-${esc(p.id)}">${fmtCny(p.cumulativePrincipal)}</td>
       <td class="ratio-cell" data-testid="summary-payer-ratio-${esc(p.id)}">${fmtPct(p.currentRatio)}</td>
-    </tr>`).join('') + '</tbody></table>' : '<div class="small-muted">暂无数据</div>';
+    </tr>`).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-people"></i>暂无数据</div>';
 
-  $('summaryLoans').innerHTML = loans.length ? '<table class="table table-sm"><thead><tr><th>名称</th><th>原始</th><th>剩余本金</th></tr></thead><tbody>' +
+  $('summaryLoans').innerHTML = loans.length ? '<table class="table table-sm table-striped"><thead><tr><th>名称</th><th>原始</th><th>剩余本金</th></tr></thead><tbody>' +
     loans.map(l => `<tr>
       <td>${esc(l.name)}</td>
       <td class="ratio-cell">${fmtCny(l.originalAmount)}</td>
       <td class="ratio-cell" data-testid="summary-loan-remaining-${esc(l.id)}">${fmtCny(l.remainingPrincipal)}</td>
-    </tr>`).join('') + '</tbody></table>' : '<div class="small-muted">暂无数据</div>';
+    </tr>`).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-bank"></i>暂无数据</div>';
 
   let h = '<thead><tr><th>月份</th><th>模式</th>' + payers.map(p=>`<th>${esc(p.name)}</th>`).join('') + '</tr></thead><tbody>';
   months.forEach(m => {

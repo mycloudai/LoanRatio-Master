@@ -563,9 +563,12 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
             if not months:
                 return jsonify({"projection": [], "payoffMonth": None})
             recent = months[-window:] if window > 0 else months
-            # Average payments per payer
+            # Average payments per payer and per loan
             payer_ids = [p["id"] for p in s.get("payers", [])]
+            loan_ids = [ln["id"] for ln in s.get("loans", [])]
             sums = {pid: 0.0 for pid in payer_ids}
+            loan_interest_sums: dict[str, float] = {lid: 0.0 for lid in loan_ids}
+            loan_principal_sums: dict[str, float] = {lid: 0.0 for lid in loan_ids}
             interest_sums = 0.0
             principal_sums = 0.0
             for m in recent:
@@ -573,18 +576,26 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
                     if pp["payerId"] in sums:
                         sums[pp["payerId"]] += float(pp.get("amount", 0.0))
                 for ld in m.get("loanDetails") or []:
-                    interest_sums += float(ld.get("interest", 0.0))
-                    principal_sums += float(ld.get("principal", 0.0))
+                    lid = ld.get("loanId")
+                    interest = float(ld.get("interest", 0.0))
+                    principal = float(ld.get("principal", 0.0))
+                    interest_sums += interest
+                    principal_sums += principal
+                    if lid in loan_interest_sums:
+                        loan_interest_sums[lid] += interest
+                        loan_principal_sums[lid] += principal
             n = max(1, len(recent))
             avg_payments = {pid: sums[pid] / n for pid in payer_ids}
             avg_interest = interest_sums / n
             avg_principal = principal_sums / n
+            avg_loan_interest = {lid: loan_interest_sums[lid] / n for lid in loan_ids}
+            avg_loan_principal = {lid: loan_principal_sums[lid] / n for lid in loan_ids}
 
             # Project forward by simulating
             projection = []
             sim_state = {
                 "payers": s.get("payers", []),
-                "loans": s.get("loans", []),
+                "loans": [dict(ln) for ln in s.get("loans", [])],
                 "downpayment": s.get("downpayment"),
                 "months": [
                     {k: v for k, v in m.items() if not k.startswith("_")} for m in months
@@ -601,11 +612,10 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
                 synth = {
                     "yearMonth": ym,
                     "mode": "auto",
-                    "loanDetails": (
-                        [{"loanId": s["loans"][0]["id"], "interest": avg_interest, "principal": avg_principal}]
-                        if s.get("loans")
-                        else []
-                    ),
+                    "loanDetails": [
+                        {"loanId": lid, "interest": avg_loan_interest[lid], "principal": avg_loan_principal[lid]}
+                        for lid in loan_ids
+                    ],
                     "payerPayments": [
                         {"payerId": pid, "amount": avg_payments[pid]} for pid in payer_ids
                     ],
