@@ -1,0 +1,55 @@
+name: QA (E2E)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          python-version: "3.11"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Python dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Install playwright-cli + Chromium
+        run: |
+          npm install -g @playwright/cli@latest
+          playwright-cli install chromium --with-deps || npx playwright install --with-deps chromium
+
+      - name: Run E2E QA suite
+        id: qa
+        run: bash qa/run_qa.sh --headless --port 5057 | tee qa-report.txt
+
+      - name: Print summary
+        if: always()
+        run: |
+          echo "## QA E2E Summary" >> $GITHUB_STEP_SUMMARY
+          if [ -f qa-report.txt ]; then
+            grep -E "总计|✓|✗" qa-report.txt | tail -200 >> $GITHUB_STEP_SUMMARY || true
+          fi
+
+      - name: Upload QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-report
+          path: qa-report.txt
+          if-no-files-found: ignore

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# uv
+.uv-cache/
+
+# Node (QA folder)
+node_modules/
+playwright-report/
+test-results/
+.playwright-cli/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# User data (LoanRatio)
+LoanRatioData/
+data.json

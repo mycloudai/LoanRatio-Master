@@ -67,11 +67,11 @@ Windows 用户：双击 `start.bat`。
 
 **第一步：分摊利息**
 
-$$\text{interest\_share}_i(t) = r_i(t-1) \times I(t)$$
+$$\text{interestShare}_i(t) = r_i(t-1) \times I(t)$$
 
 **第二步：原始净本金贡献（可为负）**
 
-$$p_i^{\text{raw}}(t) = \text{pay}_i(t) - \text{interest\_share}_i(t)$$
+$$p_i^{\text{raw}}(t) = \text{pay}_i(t) - \text{interestShare}_i(t)$$
 
 **第三步：负本金再分配**
 
