@@ -213,8 +213,10 @@ def test_scenario_e_manual_mode_updates_cp():
     assert m2["p2"]["cumulativePrincipal"] == pytest.approx(
         m1["p2"]["cumulativePrincipal"] + 1500.0, abs=1e-2
     )
-    assert m2["p1"]["ratio"] == pytest.approx(0.5, abs=1e-4)
-    assert m2["p2"]["ratio"] == pytest.approx(0.5, abs=1e-4)
+    # Ratio is equity ratio (CP_i/total_CP), NOT the manual ratio.
+    # CP: p1=112350+1500=113850, p2=90650+1500=92150, total=206000
+    assert m2["p1"]["ratio"] == pytest.approx(113_850 / 206_000, abs=1e-4)
+    assert m2["p2"]["ratio"] == pytest.approx(92_150 / 206_000, abs=1e-4)
     # Add a third auto month; basis should be CP ratio, not manual 50/50
     s["months"].append(
         {

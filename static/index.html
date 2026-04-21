@@ -1039,7 +1039,7 @@ window.openDetail = async function(ym) {
       html += '<h6>计算步骤</h6><div class="formula">'+detail.steps.map(s=>esc(s)).join('\n')+'</div>';
     }
     if (detail.mode === 'manual') {
-      html += '<h6 class="mt-3">每位参还人</h6><table class="table table-sm"><thead><tr><th>姓名</th><th>还款额</th><th>手动比例</th><th>计入本金</th><th>累计本金</th></tr></thead><tbody>';
+      html += '<h6 class="mt-3">每位参还人</h6><table class="table table-sm"><thead><tr><th>姓名</th><th>还款额</th><th>手动比例</th><th>计入本金</th><th>累计本金</th><th>截止到本月的所有权比例</th></tr></thead><tbody>';
       (payers).forEach(p => {
         const r = (detail.perPayer||{})[p.id] || {};
         const mr = (detail.manualRatios||{})[p.id];
@@ -1047,11 +1047,12 @@ window.openDetail = async function(ym) {
           <td>${fmtCny(r.payment)}</td>
           <td>${mr!=null ? (mr*100).toFixed(2)+'%' : '-'}</td>
           <td>${fmtCny(r.adjPrincipal)}</td>
-          <td>${fmtCny(r.cumulativePrincipal)}</td></tr>`;
+          <td>${fmtCny(r.cumulativePrincipal)}</td>
+          <td>${fmtPct(r.ratio)}</td></tr>`;
       });
       html += '</tbody></table>';
     } else {
-      html += '<h6 class="mt-3">每位参还人</h6><table class="table table-sm"><thead><tr><th>姓名</th><th>还款</th><th>承担利息</th><th>原始净本金</th><th>调整后净本金</th><th>累计本金</th><th>本月比例</th></tr></thead><tbody>';
+      html += '<h6 class="mt-3">每位参还人</h6><table class="table table-sm"><thead><tr><th>姓名</th><th>还款</th><th>承担利息</th><th>原始净本金</th><th>调整后净本金</th><th>累计本金</th><th>截止到本月的所有权比例</th></tr></thead><tbody>';
       (payers).forEach(p => {
         const r = (detail.perPayer||{})[p.id] || {};
         html += `<tr><td>${esc(p.name)}</td>

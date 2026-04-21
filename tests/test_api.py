@@ -588,7 +588,8 @@ def test_manual_mode_with_loan_details_and_payments(client):
     assert r.status_code == 201
     body = r.get_json()
     computed = body["computed"]["perPayer"]
-    # Ratios are from manualRatios
+    # Equity ratio = CP_i/total_CP. Since starting from zero CP:
+    # CP: p1=600, p2=400, total=1000 → ratio equals manual ratio by coincidence.
     assert computed["p1"]["ratio"] == pytest.approx(0.6, abs=1e-4)
     assert computed["p2"]["ratio"] == pytest.approx(0.4, abs=1e-4)
     # Interest share computed by manual ratio

@@ -371,8 +371,9 @@ load_state '{
     "manualRatios":{"p1":0.5,"p2":0.5}}]
 }'
 visit; click_tab months
-assert_eq "E.p1 比例 50%"     "$(read_testid 'month-ratio-2024-01-p1')"      "50.00%"
-assert_eq "E.p2 比例 50%"     "$(read_testid 'month-ratio-2024-01-p2')"      "50.00%"
+# 比例为权益比例 CP_i/CP_total (非手动比例). CP: p1=111500, p2=91500, total=203000
+assert_eq "E.p1 权益比例 54.93%"  "$(read_testid 'month-ratio-2024-01-p1')"      "54.93%"
+assert_eq "E.p2 权益比例 45.07%"  "$(read_testid 'month-ratio-2024-01-p2')"      "45.07%"
 assert_eq "E.p1 累计含本金"    "$(read_testid 'month-cumulative-2024-01-p1')" "111,500.00"
 assert_eq "E.p2 累计含本金"    "$(read_testid 'month-cumulative-2024-01-p2')" "91,500.00"
 
@@ -853,8 +854,9 @@ MANUAL_R=$(curl -sf -X POST $URL/api/months -H content-type:application/json -d 
   "manualRatios":{"p1":0.6,"p2":0.4}
 }')
 assert_eq "手动模式创建成功" "$(echo "$MANUAL_R" | jq -r '.yearMonth')" "2024-01"
-assert_near "手动 p1 ratio = 0.6" "$(echo "$MANUAL_R" | jq -r '.computed.perPayer.p1.ratio')" "0.6"
-assert_near "手动 p2 ratio = 0.4" "$(echo "$MANUAL_R" | jq -r '.computed.perPayer.p2.ratio')" "0.4"
+# 权益比例 CP_i/CP_total; 初始CP=0, adj=manual*1000, 故与手动比例相等 (0.6/0.4)
+assert_near "手动 p1 权益比例 = 0.6" "$(echo "$MANUAL_R" | jq -r '.computed.perPayer.p1.ratio')" "0.6"
+assert_near "手动 p2 权益比例 = 0.4" "$(echo "$MANUAL_R" | jq -r '.computed.perPayer.p2.ratio')" "0.4"
 # loanDetails should cause remaining to decrease
 REM=$(curl -sf $URL/api/state | jq -r '.loans[0].remainingPrincipal')
 assert_near "手动模式后 remaining = 99000" "$REM" "99000"
@@ -1456,9 +1458,11 @@ if (( $(echo "$P3_R03 < 0.01" | bc -l) )); then ok "S 03 p3 ratio<0.01: $P3_R03"
 # manualRatios: p1=0.5, p2=0.3, p3=0.2
 # total_interest=2790, total_payments=8000, actual_principal=5210
 # adj: p1=2605, p2=1563, p3=1042
-assert_near "S 04 p1 ratio" "$(api_computed 4 p1 ratio)" "0.5" 0.001
-assert_near "S 04 p2 ratio" "$(api_computed 4 p2 ratio)" "0.3" 0.001
-assert_near "S 04 p3 ratio" "$(api_computed 4 p3 ratio)" "0.2" 0.001
+# 比例为权益比例 CP_i/CP_total (非手动比例)
+# CP: p1=411747.39, p2=206630.61, p3=2042, total=620420
+assert_near "S 04 p1 ratio" "$(api_computed 4 p1 ratio)" "0.6637" 0.001
+assert_near "S 04 p2 ratio" "$(api_computed 4 p2 ratio)" "0.3330" 0.001
+assert_near "S 04 p3 ratio" "$(api_computed 4 p3 ratio)" "0.0033" 0.001
 assert_near "S 04 p1 adj" "$(api_computed 4 p1 adjPrincipal)" "2605" 1
 assert_near "S 04 p2 adj" "$(api_computed 4 p2 adjPrincipal)" "1563" 1
 assert_near "S 04 p3 adj" "$(api_computed 4 p3 adjPrincipal)" "1042" 1
@@ -1474,12 +1478,15 @@ assert_near "S 05 Σratio=1" "$R05_SUM" "1.0000"
 
 # --- 2024-07 手动 (idx=7, 还款<利息→本金=0) ---
 # total_interest=2580, total_payments=1800, actual_principal=0
+# adj=0 for all, CP unchanged from 2024-06
+# 比例为权益比例 CP_i/CP_total, adj=0 故与上月 CP 比例相同
+# CP: p1=418789.31, p2=208556.61, p3=6015.87, total=633361.79
 assert_near "S 07 p1 adj" "$(api_computed 7 p1 adjPrincipal)" "0" 0.01
 assert_near "S 07 p2 adj" "$(api_computed 7 p2 adjPrincipal)" "0" 0.01
 assert_near "S 07 p3 adj" "$(api_computed 7 p3 adjPrincipal)" "0" 0.01
-assert_near "S 07 p1 ratio" "$(api_computed 7 p1 ratio)" "0.45" 0.001
-assert_near "S 07 p2 ratio" "$(api_computed 7 p2 ratio)" "0.35" 0.001
-assert_near "S 07 p3 ratio" "$(api_computed 7 p3 ratio)" "0.2" 0.001
+assert_near "S 07 p1 ratio" "$(api_computed 7 p1 ratio)" "0.6612" 0.001
+assert_near "S 07 p2 ratio" "$(api_computed 7 p2 ratio)" "0.3293" 0.001
+assert_near "S 07 p3 ratio" "$(api_computed 7 p3 ratio)" "0.0095" 0.001
 
 # --- 2024-08 自动 (idx=8, 手动后恢复CP比例) ---
 R08_SUM=$(awk -v a="$(api_computed 8 p1 ratio)" -v b="$(api_computed 8 p2 ratio)" -v c="$(api_computed 8 p3 ratio)" 'BEGIN{printf "%.4f",a+b+c}')

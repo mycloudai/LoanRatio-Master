@@ -169,19 +169,27 @@ def _compute_manual_month(
     total_payments = sum(payments.get(pid, 0.0) for pid in active_ids)
     actual_principal = max(0.0, total_payments - total_interest)
     per: dict[str, dict[str, float]] = {}
+    new_cp: dict[str, float] = {}
     for pid in payer_ids_all:
         is_active = pid in active_ids
         mr = float(manual_ratios.get(pid, 0.0))
         i_share = mr * total_interest if is_active else 0.0
         pay = payments.get(pid, 0.0) if is_active else 0.0
         adj = mr * actual_principal if is_active else 0.0
+        new_cp_pid = prev_cp.get(pid, 0.0) + adj
+        new_cp[pid] = new_cp_pid
         per[pid] = {
             "interestShare": i_share,
             "rawPrincipal": (pay - i_share) if is_active else 0.0,
             "adjPrincipal": adj,
-            "cumulativePrincipal": prev_cp.get(pid, 0.0) + adj,
-            "ratio": mr,
+            "cumulativePrincipal": new_cp_pid,
+            "ratio": 0.0,  # filled below after all CPs are computed
         }
+    # Ratio = equity ratio (CP_i / total_CP), consistent with auto mode.
+    # This reflects each payer's ownership share after this month's principal update.
+    cp_total = sum(new_cp.values())
+    for pid in payer_ids_all:
+        per[pid]["ratio"] = (new_cp[pid] / cp_total) if cp_total > 0 else 0.0
     return per
 
 
