@@ -31,7 +31,9 @@ def test_about(client):
     data = r.get_json()
     assert data["version"]
     assert data["repoUrl"].startswith("https://github.com/mycloudai/")
-    assert "Changelog" in data["changelogMarkdown"] or "更新" in data["changelogMarkdown"]
+    assert (
+        "Changelog" in data["changelogMarkdown"] or "更新" in data["changelogMarkdown"]
+    )
     assert "userguideMarkdown" in data
     assert "使用指南" in data["userguideMarkdown"]
 
@@ -57,7 +59,8 @@ def test_payer_and_loan_crud(client):
     assert r.status_code == 400
 
     r = client.post(
-        "/api/loans", json={"name": "贷款", "originalAmount": 100_000, "remainingPrincipal": 100_000}
+        "/api/loans",
+        json={"name": "贷款", "originalAmount": 100_000, "remainingPrincipal": 100_000},
     )
     assert r.status_code == 201
     assert r.get_json()["id"] == "l1"
@@ -67,7 +70,8 @@ def test_month_creation_happy_path(client):
     client.post("/api/payers", json={"name": "张三"})
     client.post("/api/payers", json={"name": "李四"})
     client.post(
-        "/api/loans", json={"name": "L", "originalAmount": 100_000, "remainingPrincipal": 100_000}
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100_000, "remainingPrincipal": 100_000},
     )
     r = client.post(
         "/api/months",
@@ -83,12 +87,16 @@ def test_month_creation_happy_path(client):
     )
     assert r.status_code == 201, r.get_json()
     body = r.get_json()
-    assert body["computed"]["perPayer"]["p1"]["rawPrincipal"] == pytest.approx(2500.0, abs=1e-6)
+    assert body["computed"]["perPayer"]["p1"]["rawPrincipal"] == pytest.approx(
+        2500.0, abs=1e-6
+    )
 
 
 def test_month_consecutive_required(client):
     client.post("/api/payers", json={"name": "张三"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10, "remainingPrincipal": 10})
+    client.post(
+        "/api/loans", json={"name": "L", "originalAmount": 10, "remainingPrincipal": 10}
+    )
     client.post(
         "/api/months",
         json={
@@ -114,7 +122,9 @@ def test_month_consecutive_required(client):
 def test_manual_ratios_must_sum_to_one(client):
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10, "remainingPrincipal": 10})
+    client.post(
+        "/api/loans", json={"name": "L", "originalAmount": 10, "remainingPrincipal": 10}
+    )
     r = client.post(
         "/api/months",
         json={
@@ -148,7 +158,9 @@ def test_downpayment_before_months(client):
 
 def test_delete_only_most_recent(client):
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10, "remainingPrincipal": 10})
+    client.post(
+        "/api/loans", json={"name": "L", "originalAmount": 10, "remainingPrincipal": 10}
+    )
     for ym in ["2024-01", "2024-02"]:
         client.post(
             "/api/months",
@@ -174,7 +186,14 @@ def test_state_reset_and_load(client):
 
     seed = {
         "payers": [{"id": "p1", "name": "X", "startMonth": None}],
-        "loans": [{"id": "l1", "name": "L", "originalAmount": 1000, "remainingPrincipal": 1000}],
+        "loans": [
+            {
+                "id": "l1",
+                "name": "L",
+                "originalAmount": 1000,
+                "remainingPrincipal": 1000,
+            }
+        ],
         "months": [],
     }
     r = client.post("/api/state/load", json={"state": seed})
@@ -186,7 +205,10 @@ def test_state_reset_and_load(client):
 def test_summary_endpoint(client):
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100},
+    )
     client.post(
         "/api/months",
         json={
@@ -208,7 +230,10 @@ def test_summary_endpoint(client):
 
 def test_export_excel(client):
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100},
+    )
     client.post(
         "/api/months",
         json={
@@ -226,7 +251,9 @@ def test_export_excel(client):
 
 def test_unknown_loan_id_rejected(client):
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10, "remainingPrincipal": 10})
+    client.post(
+        "/api/loans", json={"name": "L", "originalAmount": 10, "remainingPrincipal": 10}
+    )
     r = client.post(
         "/api/months",
         json={
@@ -241,7 +268,10 @@ def test_unknown_loan_id_rejected(client):
 
 def test_month_detail_endpoint(client):
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100},
+    )
     client.post(
         "/api/months",
         json={
@@ -357,7 +387,10 @@ def test_month_detail_all_negative_redistribution(client):
 def test_patch_month_recomputes(client):
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 1000, "remainingPrincipal": 1000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 1000, "remainingPrincipal": 1000},
+    )
     client.post(
         "/api/months",
         json={
@@ -397,7 +430,10 @@ def test_root_serves_placeholder_when_no_frontend(client):
 
 def test_forecast_endpoint(client):
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 1000, "remainingPrincipal": 900})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 1000, "remainingPrincipal": 900},
+    )
     client.post(
         "/api/months",
         json={
@@ -416,8 +452,15 @@ def test_forecast_endpoint(client):
 def test_forecast_selected_months(client):
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000})
-    for ym, a1, a2 in [("2024-01", 200, 100), ("2024-02", 500, 300), ("2024-03", 200, 100)]:
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000},
+    )
+    for ym, a1, a2 in [
+        ("2024-01", 200, 100),
+        ("2024-02", 500, 300),
+        ("2024-03", 200, 100),
+    ]:
         client.post(
             "/api/months",
             json={
@@ -439,9 +482,7 @@ def test_forecast_selected_months(client):
     body = r.get_json()
     assert len(body["projection"]) == 3
     # All history (lower average) should give different ratios
-    r2 = client.post(
-        "/api/forecast", json={"windowMonths": 0, "horizonMonths": 3}
-    )
+    r2 = client.post("/api/forecast", json={"windowMonths": 0, "horizonMonths": 3})
     body2 = r2.get_json()
     # The selected-month forecast should differ from all-history forecast
     assert body["projection"] != body2["projection"]
@@ -457,7 +498,10 @@ def test_forecast_selected_months(client):
 def test_forecast_selected_months_multiple(client):
     """Selecting multiple months averages their payment patterns."""
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000},
+    )
     for ym, amt in [("2024-01", 100), ("2024-02", 200), ("2024-03", 300)]:
         client.post(
             "/api/months",
@@ -492,7 +536,10 @@ def test_forecast_selected_months_multiple(client):
 def test_forecast_selected_months_bad_type(client):
     """selectedMonths must be an array."""
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100},
+    )
     client.post(
         "/api/months",
         json={
@@ -502,14 +549,19 @@ def test_forecast_selected_months_bad_type(client):
             "payerPayments": [{"payerId": "p1", "amount": 10}],
         },
     )
-    r = client.post("/api/forecast", json={"selectedMonths": "2024-01", "horizonMonths": 3})
+    r = client.post(
+        "/api/forecast", json={"selectedMonths": "2024-01", "horizonMonths": 3}
+    )
     assert r.status_code == 400
 
 
 def test_forecast_selected_months_empty_array(client):
     """selectedMonths=[] should return 400, not silently fall back to window."""
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100},
+    )
     client.post(
         "/api/months",
         json={
@@ -526,7 +578,10 @@ def test_forecast_selected_months_empty_array(client):
 def test_forecast_all_history_window_zero(client):
     """windowMonths=0 uses all historical months."""
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 5000, "remainingPrincipal": 5000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 5000, "remainingPrincipal": 5000},
+    )
     for ym in ["2024-01", "2024-02", "2024-03"]:
         client.post(
             "/api/months",
@@ -561,7 +616,11 @@ def test_loan_remaining_explicit_overrides_default(client):
     """Explicit remainingPrincipal is respected."""
     r = client.post(
         "/api/loans",
-        json={"name": "二手房贷", "originalAmount": 800000, "remainingPrincipal": 600000},
+        json={
+            "name": "二手房贷",
+            "originalAmount": 800000,
+            "remainingPrincipal": 600000,
+        },
     )
     assert r.status_code == 201
     assert r.get_json()["remainingPrincipal"] == pytest.approx(600000.0)
@@ -571,7 +630,10 @@ def test_manual_mode_with_loan_details_and_payments(client):
     """Manual mode accepts loanDetails and payerPayments alongside manualRatios."""
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 100000, "remainingPrincipal": 100000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100000, "remainingPrincipal": 100000},
+    )
     r = client.post(
         "/api/months",
         json={
@@ -611,7 +673,10 @@ def test_summary_snapshot_data_at_specific_month(client):
     """State contains enough computed data to reconstruct any historical time-point."""
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000},
+    )
     # Create 3 months with varying payments
     for ym, a1, a2, prin in [
         ("2024-01", 300, 200, 100),
@@ -656,9 +721,7 @@ def test_summary_snapshot_data_at_specific_month(client):
 
     # Loan remaining at each snapshot can be computed from cumulative principal
     total_principal_paid = sum(
-        ld["principal"]
-        for m in months
-        for ld in m.get("loanDetails", [])
+        ld["principal"] for m in months for ld in m.get("loanDetails", [])
     )
     final_remaining = s["loans"][0]["remainingPrincipal"]
     assert final_remaining == pytest.approx(10000 - total_principal_paid, abs=1e-2)
@@ -678,6 +741,7 @@ def test_storage_roundtrip(tmp_path):
 def test_config_endpoint(client, tmp_path, monkeypatch):
     # Use an isolated config path to avoid clobbering the user's real one
     from app import storage
+
     fake_cfg = tmp_path / ".loanratio_config.json"
     monkeypatch.setattr(storage, "CONFIG_PATH", fake_cfg)
     dp = str(tmp_path / "data2.json")
@@ -701,7 +765,10 @@ def test_forecast_returns_loan_forecasts_and_series(client):
     """Forecast should include loanForecasts, series, and months."""
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000},
+    )
     for ym, a1, a2 in [("2024-01", 200, 100), ("2024-02", 200, 100)]:
         client.post(
             "/api/months",
@@ -736,8 +803,14 @@ def test_forecast_returns_loan_forecasts_and_series(client):
 def test_forecast_multi_loan_one_missing_data(client):
     """When one loan has no loanDetails in historical months, noData=True."""
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "商贷", "originalAmount": 500000, "remainingPrincipal": 400000})
-    client.post("/api/loans", json={"name": "公积金", "originalAmount": 800000, "remainingPrincipal": 800000})
+    client.post(
+        "/api/loans",
+        json={"name": "商贷", "originalAmount": 500000, "remainingPrincipal": 400000},
+    )
+    client.post(
+        "/api/loans",
+        json={"name": "公积金", "originalAmount": 800000, "remainingPrincipal": 800000},
+    )
     # Only provide loanDetails for l1 (商贷), not l2 (公积金)
     client.post(
         "/api/months",
@@ -774,8 +847,14 @@ def test_forecast_multi_loan_one_missing_data(client):
 def test_forecast_multi_loan_both_payable(client):
     """When both loans have data, overall payoff is the later one."""
     client.post("/api/payers", json={"name": "A"})
-    client.post("/api/loans", json={"name": "商贷", "originalAmount": 10000, "remainingPrincipal": 10000})
-    client.post("/api/loans", json={"name": "公积金", "originalAmount": 20000, "remainingPrincipal": 20000})
+    client.post(
+        "/api/loans",
+        json={"name": "商贷", "originalAmount": 10000, "remainingPrincipal": 10000},
+    )
+    client.post(
+        "/api/loans",
+        json={"name": "公积金", "originalAmount": 20000, "remainingPrincipal": 20000},
+    )
     client.post(
         "/api/months",
         json={
@@ -812,10 +891,18 @@ def test_forecast_excludes_downpayment_from_averaging(client):
     """Downpayment month (0000-00) must not be included in average calculations."""
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000},
+    )
     client.post(
         "/api/months/downpayment",
-        json={"contributions": [{"payerId": "p1", "amount": 5000}, {"payerId": "p2", "amount": 5000}]},
+        json={
+            "contributions": [
+                {"payerId": "p1", "amount": 5000},
+                {"payerId": "p2", "amount": 5000},
+            ]
+        },
     )
     # Only one regular month
     client.post(
@@ -824,7 +911,10 @@ def test_forecast_excludes_downpayment_from_averaging(client):
             "yearMonth": "2024-01",
             "mode": "auto",
             "loanDetails": [{"loanId": "l1", "interest": 50, "principal": 100}],
-            "payerPayments": [{"payerId": "p1", "amount": 100}, {"payerId": "p2", "amount": 50}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 100},
+                {"payerId": "p2", "amount": 50},
+            ],
         },
     )
     r = client.post("/api/forecast", json={"windowMonths": 0, "horizonMonths": 3})
@@ -843,11 +933,19 @@ def test_forecast_single_payer_100_percent(client):
     """Single payer paying everything should converge to ~100% ratio."""
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 100000, "remainingPrincipal": 100000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100000, "remainingPrincipal": 100000},
+    )
     # A pays all downpayment, B pays nothing
     client.post(
         "/api/months/downpayment",
-        json={"contributions": [{"payerId": "p1", "amount": 100000}, {"payerId": "p2", "amount": 0}]},
+        json={
+            "contributions": [
+                {"payerId": "p1", "amount": 100000},
+                {"payerId": "p2", "amount": 0},
+            ]
+        },
     )
     # A pays everything monthly, B pays 0
     for ym in ["2024-01", "2024-02"]:
@@ -857,7 +955,10 @@ def test_forecast_single_payer_100_percent(client):
                 "yearMonth": ym,
                 "mode": "auto",
                 "loanDetails": [{"loanId": "l1", "interest": 500, "principal": 1000}],
-                "payerPayments": [{"payerId": "p1", "amount": 1500}, {"payerId": "p2", "amount": 0}],
+                "payerPayments": [
+                    {"payerId": "p1", "amount": 1500},
+                    {"payerId": "p2", "amount": 0},
+                ],
             },
         )
     r = client.post("/api/forecast", json={"windowMonths": 0, "horizonMonths": 12})
@@ -874,10 +975,18 @@ def test_manual_mode_underpayment_principal(client):
     """When payers pay less than interest in manual mode, CP should not increase."""
     client.post("/api/payers", json={"name": "A"})
     client.post("/api/payers", json={"name": "B"})
-    client.post("/api/loans", json={"name": "L", "originalAmount": 100000, "remainingPrincipal": 100000})
+    client.post(
+        "/api/loans",
+        json={"name": "L", "originalAmount": 100000, "remainingPrincipal": 100000},
+    )
     client.post(
         "/api/months/downpayment",
-        json={"contributions": [{"payerId": "p1", "amount": 50000}, {"payerId": "p2", "amount": 50000}]},
+        json={
+            "contributions": [
+                {"payerId": "p1", "amount": 50000},
+                {"payerId": "p2", "amount": 50000},
+            ]
+        },
     )
     r = client.post(
         "/api/months",

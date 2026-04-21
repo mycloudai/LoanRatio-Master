@@ -29,6 +29,7 @@ def _seed_two_payers_one_loan(state):
 
 # --------- Scenario A: with downpayment ------------------------------------
 
+
 def test_scenario_a_downpayment_first_month():
     s = _empty_state()
     _seed_two_payers_one_loan(s)
@@ -65,6 +66,7 @@ def test_scenario_a_downpayment_first_month():
 
 # --------- Scenario B: zero downpayment, equal split first month -----------
 
+
 def test_scenario_b_zero_downpayment_equal_split():
     s = _empty_state()
     _seed_two_payers_one_loan(s)
@@ -94,6 +96,7 @@ def test_scenario_b_zero_downpayment_equal_split():
 
 
 # --------- Scenario C: normal month ---------------------------------------
+
 
 def test_scenario_c_normal_month():
     s = _empty_state()
@@ -132,6 +135,7 @@ def test_scenario_c_normal_month():
 
 # --------- Scenario D: negative principal redistribution ------------------
 
+
 def test_scenario_d_negative_principal_redistribution():
     s = _empty_state()
     _seed_two_payers_one_loan(s)
@@ -166,6 +170,7 @@ def test_scenario_d_negative_principal_redistribution():
 
 
 # --------- Scenario E: manual mode updates CP by ratio × principal ----------
+
 
 def test_scenario_e_manual_mode_updates_cp():
     s = _empty_state()
@@ -239,6 +244,7 @@ def test_scenario_e_manual_mode_updates_cp():
 
 # --------- Cascading recompute when editing history ------------------------
 
+
 def test_cascading_recompute_on_history_edit():
     s = _empty_state()
     _seed_two_payers_one_loan(s)
@@ -279,6 +285,7 @@ def test_cascading_recompute_on_history_edit():
 
 
 # --------- Payer delete with merge strategy --------------------------------
+
 
 def test_payer_delete_merge_preserves_total_cp():
     s = _empty_state()
@@ -342,10 +349,13 @@ def test_payer_delete_strategy_removes_records():
         pp["payerId"] != "p2" for m in s["months"] for pp in m.get("payerPayments", [])
     )
     # Only p1 should remain and have ratio 1.0
-    assert s["months"][-1]["computed"]["perPayer"]["p1"]["ratio"] == pytest.approx(1.0, abs=1e-4)
+    assert s["months"][-1]["computed"]["perPayer"]["p1"]["ratio"] == pytest.approx(
+        1.0, abs=1e-4
+    )
 
 
 # --------- startMonth honored ----------------------------------------------
+
 
 def test_payer_start_month_excludes_early_months():
     s = _empty_state()
@@ -373,6 +383,7 @@ def test_payer_start_month_excludes_early_months():
 
 
 # --------- Downpayment seeding basics --------------------------------------
+
 
 def test_downpayment_seeds_initial_ratio():
     s = _empty_state()
@@ -404,6 +415,7 @@ def test_downpayment_seeds_initial_ratio():
 
 
 # --------- Manual mode with multiple subsequent months --------------------
+
 
 def test_manual_month_basis_auto_uses_cp_ratio():
     s = _empty_state()
@@ -525,6 +537,7 @@ def test_manual_with_principal_updates_cp_and_auto_resumes():
     assert m3["p1"]["cumulativePrincipal"] > 62200
     assert m3["p2"]["cumulativePrincipal"] > 41800
 
+
 def test_three_payer_negative_redistribution_weighted():
     s = _empty_state()
     calculator.add_payer(s, "A")
@@ -567,6 +580,7 @@ def test_three_payer_negative_redistribution_weighted():
 
 
 # --------- Loan remaining principal auto-updated ---------------------------
+
 
 def test_loan_remaining_principal_decreases():
     s = _empty_state()

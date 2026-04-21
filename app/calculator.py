@@ -232,7 +232,10 @@ def recompute_all(state: dict[str, Any]) -> dict[str, Any]:
             prev_ratio = init_r
 
         mode = m.get("mode", "auto")
-        payments = {pp["payerId"]: float(pp.get("amount", 0.0)) for pp in m.get("payerPayments", [])}
+        payments = {
+            pp["payerId"]: float(pp.get("amount", 0.0))
+            for pp in m.get("payerPayments", [])
+        }
         loan_details = m.get("loanDetails", []) or []
         total_interest = sum(float(ld.get("interest", 0.0)) for ld in loan_details)
 
@@ -252,7 +255,9 @@ def recompute_all(state: dict[str, Any]) -> dict[str, Any]:
             if cp_total > 0:
                 next_ratio = {pid: cp_state[pid] / cp_total for pid in payer_ids_all}
             else:
-                next_ratio = {pid: float(manual_ratios.get(pid, 0.0)) for pid in payer_ids_all}
+                next_ratio = {
+                    pid: float(manual_ratios.get(pid, 0.0)) for pid in payer_ids_all
+                }
         else:
             per = _compute_auto_month(
                 payer_ids_all=payer_ids_all,
@@ -304,7 +309,9 @@ def add_payer(state: dict, name: str, start_month: str | None = None) -> dict:
     return payer
 
 
-def add_loan(state: dict, name: str, original_amount: float, remaining_principal: float) -> dict:
+def add_loan(
+    state: dict, name: str, original_amount: float, remaining_principal: float
+) -> dict:
     loans = state.setdefault("loans", [])
     next_id = f"l{len(loans) + 1}"
     used = {ln["id"] for ln in loans}
@@ -356,7 +363,9 @@ def delete_payer(state: dict, payer_id: str, strategy: str) -> None:
                 for pid, w in weights.items():
                     extra = deleted_amt * (w / wsum)
                     if pid in kept_map:
-                        kept_map[pid]["amount"] = float(kept_map[pid].get("amount", 0.0)) + extra
+                        kept_map[pid]["amount"] = (
+                            float(kept_map[pid].get("amount", 0.0)) + extra
+                        )
                     else:
                         kept.append({"payerId": pid, "amount": extra})
             m["payerPayments"] = kept
@@ -407,7 +416,9 @@ def delete_payer(state: dict, payer_id: str, strategy: str) -> None:
     recompute_all(state)
 
 
-def delete_loan(state: dict, loan_id: str, strategy: str, target_id: str | None = None) -> None:
+def delete_loan(
+    state: dict, loan_id: str, strategy: str, target_id: str | None = None
+) -> None:
     loans = state.get("loans", [])
     if loan_id not in {ln["id"] for ln in loans}:
         raise ValueError(f"unknown loan {loan_id}")
