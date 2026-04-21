@@ -8,6 +8,7 @@
 #   bash qa/run_qa.sh --headed             # 有头模式
 #   bash qa/run_qa.sh --port 8080          # 自定义端口
 #   bash qa/run_qa.sh --headed --port 8080
+#   bash qa/run_qa.sh --sanity-only        # 仅运行 sanity test（纯 API 计算准确性校验）
 #
 # 退出码: 0 = 全部通过; N = 失败用例数 (封顶 255)
 
@@ -16,13 +17,15 @@ set -euo pipefail
 # -------- 参数 --------
 HEADED=0
 PORT=5057
+SANITY_ONLY=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --headed)   HEADED=1; shift ;;
-    --headless) HEADED=0; shift ;;
-    --port)     PORT="$2"; shift 2 ;;
-    --port=*)   PORT="${1#*=}"; shift ;;
-    -h|--help)  sed -n '2,14p' "$0"; exit 0 ;;
+    --headed)      HEADED=1; shift ;;
+    --headless)    HEADED=0; shift ;;
+    --port)        PORT="$2"; shift 2 ;;
+    --port=*)      PORT="${1#*=}"; shift ;;
+    --sanity-only) SANITY_ONLY=1; shift ;;
+    -h|--help)     sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "未知参数: $1"; exit 2 ;;
   esac
 done
@@ -156,6 +159,7 @@ api_computed() {
 
 section() { echo; echo "${C_BOLD}━━ $* ━━${C_END}"; }
 
+if [[ $SANITY_ONLY -eq 0 ]]; then
 # =====================================================================
 # 1. 健康 / About / 基础 API
 # =====================================================================
@@ -369,8 +373,8 @@ load_state '{
 visit; click_tab months
 assert_eq "E.p1 比例 50%"     "$(read_testid 'month-ratio-2024-01-p1')"      "50.00%"
 assert_eq "E.p2 比例 50%"     "$(read_testid 'month-ratio-2024-01-p2')"      "50.00%"
-assert_eq "E.p1 累计含本金"    "$(read_testid 'month-cumulative-2024-01-p1')" "111,000.00"
-assert_eq "E.p2 累计含本金"    "$(read_testid 'month-cumulative-2024-01-p2')" "91,000.00"
+assert_eq "E.p1 累计含本金"    "$(read_testid 'month-cumulative-2024-01-p1')" "111,500.00"
+assert_eq "E.p2 累计含本金"    "$(read_testid 'month-cumulative-2024-01-p2')" "91,500.00"
 
 # =====================================================================
 # 11. 手动 → 自动模式基准切换
@@ -799,8 +803,7 @@ assert_eq "跨年月份数 = 2" "$(curl -sf $URL/api/state | jq '.months|length'
 section "35. 边界: 无数据预测"
 reset_state
 CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST $URL/api/forecast -H content-type:application/json -d '{"windowMonths":3,"horizonMonths":6}')
-# 允许 200 (空 projection) 或 400 (拒绝) — 验证返回结构稳定
-if [[ "$CODE" == "200" || "$CODE" == "400" ]]; then ok "空状态 forecast → $CODE (结构稳定)"; else bad "空状态 forecast → 意外 $CODE"; fi
+assert_eq "空状态 forecast → 400" "$CODE" "400"
 
 # =====================================================================
 # 36. 边界: 首付累计 = 0 时的零首付分支
@@ -873,6 +876,9 @@ load_state '{
 FC_ALL=$(curl -sf -X POST $URL/api/forecast -H content-type:application/json -d '{"windowMonths":0,"horizonMonths":6}')
 assert_eq "window=0 projection len=6" "$(echo "$FC_ALL" | jq '.projection|length')" "6"
 assert_nonempty "window=0 payoffMonth" "$(echo "$FC_ALL" | jq -r '.payoffMonth')"
+assert_nonempty "window=0 剩余利息"    "$(echo "$FC_ALL" | jq -r '.loanForecasts[0].totalFutureInterest')"
+assert_eq "window=0 series p1 len=6"  "$(echo "$FC_ALL" | jq '.series.p1|length')" "6"
+assert_eq "window=0 months len=6"     "$(echo "$FC_ALL" | jq '.months|length')" "6"
 
 # =====================================================================
 # 40. 预测 - 选定月份模式
@@ -1021,6 +1027,657 @@ if grep -Fq 'summarySnapshotYm' "$SRC_HTML"; then
 else
   bad "JS 缺 summarySnapshotYm"
 fi
+
+
+# =====================================================================
+# 46. 还款金额不一致确认对话框 (Bootstrap modal)
+# =====================================================================
+section "46. 还款金额不一致确认"
+
+# Setup: 2 payers, 1 loan, no months yet
+load_state '{
+  "payers":[{"id":"p1","name":"张三"},{"id":"p2","name":"李四"}],
+  "loans":[{"id":"l1","name":"商贷","originalAmount":100000,"remainingPrincipal":100000}],
+  "downpayment":null,
+  "months":[]
+}'
+visit; click_tab months
+
+# Fill mismatched data: bank total = 3000+5000 = 8000, payer total = 5000+2000 = 7000
+PCLI fill "[data-testid=\"month-loan-interest-l1\"]" "3000" >/dev/null
+PCLI fill "[data-testid=\"month-loan-principal-l1\"]" "5000" >/dev/null
+PCLI fill "[data-testid=\"month-payer-payment-p1\"]" "5000" >/dev/null
+PCLI fill "[data-testid=\"month-payer-payment-p2\"]" "2000" >/dev/null
+click_testid "month-create-btn"
+sleep 1
+# Check confirm modal is visible
+MODAL_VISIBLE=$(peval "document.querySelector('#confirmModal').classList.contains('show')")
+assert_eq "不一致时触发确认对话框" "$MODAL_VISIBLE" "true"
+MODAL_BODY=$(peval "document.querySelector('#confirmModalBody').textContent")
+assert_eq "对话框提及银行总额" "$(echo "$MODAL_BODY" | grep -q '8,000' && echo found || echo missing)" "found"
+assert_eq "对话框提及还款总额" "$(echo "$MODAL_BODY" | grep -q '7,000' && echo found || echo missing)" "found"
+# Click cancel — month should NOT be created
+PCLI click "#confirmModalCancel" >/dev/null
+sleep 0.5
+MONTH_COUNT=$(curl -sf "$URL/api/state" | jq '.months|length')
+assert_eq "取消后月份未创建" "$MONTH_COUNT" "0"
+
+# Now click create again and accept
+click_testid "month-create-btn"
+sleep 1
+PCLI click "#confirmModalOk" >/dev/null
+sleep 1
+MONTH_COUNT=$(curl -sf "$URL/api/state" | jq '.months|length')
+assert_eq "确认后月份已创建" "$MONTH_COUNT" "1"
+
+# Matched amounts: no dialog triggered
+load_state '{
+  "payers":[{"id":"p1","name":"张三"},{"id":"p2","name":"李四"}],
+  "loans":[{"id":"l1","name":"商贷","originalAmount":100000,"remainingPrincipal":100000}],
+  "downpayment":null,
+  "months":[]
+}'
+visit; click_tab months
+PCLI fill "[data-testid=\"month-loan-interest-l1\"]" "3000" >/dev/null
+PCLI fill "[data-testid=\"month-loan-principal-l1\"]" "5000" >/dev/null
+PCLI fill "[data-testid=\"month-payer-payment-p1\"]" "5000" >/dev/null
+PCLI fill "[data-testid=\"month-payer-payment-p2\"]" "3000" >/dev/null
+click_testid "month-create-btn"
+sleep 1
+MODAL_VISIBLE2=$(peval "String(document.querySelector('#confirmModal').classList.contains('show'))")
+assert_eq "金额一致时不触发确认" "$MODAL_VISIBLE2" "false"
+MONTH_COUNT=$(curl -sf "$URL/api/state" | jq '.months|length')
+assert_eq "金额一致直接创建成功" "$MONTH_COUNT" "1"
+
+# =====================================================================
+# 47. 手动月份详情步骤
+# =====================================================================
+section "47. 手动月份详情"
+load_state '{
+  "payers":[{"id":"p1","name":"张三"},{"id":"p2","name":"李四"}],
+  "loans":[{"id":"l1","name":"商贷","originalAmount":100000,"remainingPrincipal":100000}],
+  "downpayment":null,
+  "months":[{"yearMonth":"2024-01","mode":"manual",
+    "loanDetails":[{"loanId":"l1","interest":500,"principal":1000}],
+    "payerPayments":[{"payerId":"p1","amount":1000},{"payerId":"p2","amount":500}],
+    "manualRatios":{"p1":0.6,"p2":0.4}}]
+}'
+# API detail check
+DETAIL=$(curl -sf "$URL/api/months/2024-01/detail")
+assert_eq "手动详情 mode=manual"         "$(echo "$DETAIL" | jq -r .mode)" "manual"
+STEPS=$(echo "$DETAIL" | jq -r '.steps[]')
+assert_eq "详情含手动比例月份标识" "$(echo "$STEPS" | grep -q '手动比例月份' && echo found || echo missing)" "found"
+assert_eq "详情含还款总额"         "$(echo "$STEPS" | grep -q '还款总额' && echo found || echo missing)" "found"
+assert_eq "详情含实际本金推导"     "$(echo "$STEPS" | grep -q '实际本金' && echo found || echo missing)" "found"
+assert_eq "详情含手动比例字样"     "$(echo "$STEPS" | grep -q '手动比例' && echo found || echo missing)" "found"
+# Should NOT contain auto mode step keywords
+assert_eq "不含 Step 1 自动公式" "$(echo "$STEPS" | grep -q 'Step 1' && echo found || echo missing)" "missing"
+assert_eq "不含 Step 2 自动公式" "$(echo "$STEPS" | grep -q 'Step 2' && echo found || echo missing)" "missing"
+
+# Also verify auto month detail still has Step 1-4
+load_state '{
+  "payers":[{"id":"p1","name":"张三"},{"id":"p2","name":"李四"}],
+  "loans":[{"id":"l1","name":"商贷","originalAmount":100000,"remainingPrincipal":100000}],
+  "downpayment":null,
+  "months":[{"yearMonth":"2024-01","mode":"auto",
+    "loanDetails":[{"loanId":"l1","interest":500,"principal":1000}],
+    "payerPayments":[{"payerId":"p1","amount":1000},{"payerId":"p2","amount":500}]}]
+}'
+DETAIL_AUTO=$(curl -sf "$URL/api/months/2024-01/detail")
+STEPS_AUTO=$(echo "$DETAIL_AUTO" | jq -r '.steps[]')
+assert_eq "自动详情含 Step 1"  "$(echo "$STEPS_AUTO" | grep -q 'Step 1' && echo found || echo missing)" "found"
+assert_eq "自动详情含 Step 2"  "$(echo "$STEPS_AUTO" | grep -q 'Step 2' && echo found || echo missing)" "found"
+assert_eq "自动详情含 Step 3"  "$(echo "$STEPS_AUTO" | grep -q 'Step 3' && echo found || echo missing)" "found"
+assert_eq "自动详情含 Step 4"  "$(echo "$STEPS_AUTO" | grep -q 'Step 4' && echo found || echo missing)" "found"
+assert_eq "自动详情不含手动标识" "$(echo "$STEPS_AUTO" | grep -q '手动比例月份' && echo found || echo missing)" "missing"
+
+# =====================================================================
+# 48. checkPaymentMismatch 前端函数存在性
+# =====================================================================
+section "48. HTML 含还款校验函数"
+if grep -Fq 'checkPaymentMismatch' "$SRC_HTML"; then
+  ok "HTML 含 checkPaymentMismatch 函数"
+else
+  bad "HTML 缺 checkPaymentMismatch"
+fi
+
+# =====================================================================
+# 49. UI 月份删除按钮（仅最后一月）
+# =====================================================================
+section "49. UI 月份删除按钮"
+load_state '{
+  "payers":[{"id":"p1","name":"A"}],
+  "loans":[{"id":"l1","name":"L","originalAmount":10000,"remainingPrincipal":10000}],
+  "downpayment":null,
+  "months":[
+    {"yearMonth":"2024-01","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":150}]},
+    {"yearMonth":"2024-02","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":150}]},
+    {"yearMonth":"2024-03","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":150}]}
+  ]
+}'
+visit; click_tab months
+# Non-last months should NOT have delete button
+HAS_DEL_01=$(peval "String(document.querySelector('[data-testid=\"month-delete-2024-01\"]') !== null)")
+assert_eq "2024-01 无删除按钮" "$HAS_DEL_01" "false"
+HAS_DEL_02=$(peval "String(document.querySelector('[data-testid=\"month-delete-2024-02\"]') !== null)")
+assert_eq "2024-02 无删除按钮" "$HAS_DEL_02" "false"
+# Last month should have delete button
+HAS_DEL_03=$(peval "String(document.querySelector('[data-testid=\"month-delete-2024-03\"]') !== null)")
+assert_eq "2024-03 有删除按钮" "$HAS_DEL_03" "true"
+# Click delete, confirm via modal
+peval "document.querySelector('[data-testid=\"month-delete-2024-03\"]').click()" >/dev/null
+sleep 0.5
+PCLI click "#confirmModalOk" >/dev/null
+sleep 1
+MONTH_COUNT=$(curl -sf "$URL/api/state" | jq '.months|length')
+assert_eq "删除后月数=2" "$MONTH_COUNT" "2"
+# Now 2024-02 should be deletable
+visit; click_tab months
+HAS_DEL_02_NOW=$(peval "String(document.querySelector('[data-testid=\"month-delete-2024-02\"]') !== null)")
+assert_eq "2024-02 现在有删除按钮" "$HAS_DEL_02_NOW" "true"
+
+# =====================================================================
+# 50. 预测 - 多贷款及缺失数据
+# =====================================================================
+section "50. 预测多贷款及noData"
+load_state '{
+  "payers":[{"id":"p1","name":"A"}],
+  "loans":[{"id":"l1","name":"商贷","originalAmount":10000,"remainingPrincipal":9900},{"id":"l2","name":"公积金","originalAmount":20000,"remainingPrincipal":20000}],
+  "downpayment":null,
+  "months":[
+    {"yearMonth":"2024-01","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100},{"loanId":"l2","interest":0,"principal":0}],"payerPayments":[{"payerId":"p1","amount":150}]}
+  ]
+}'
+FC=$(curl -sf -X POST $URL/api/forecast -H content-type:application/json -d '{"windowMonths":0,"horizonMonths":6}')
+assert_eq "多贷款 loanForecasts 数" "$(echo "$FC" | jq '.loanForecasts|length')" "2"
+L1_NODATA=$(echo "$FC" | jq -r '.loanForecasts[] | select(.loanId=="l1") | .noData')
+assert_eq "l1 有数据" "$L1_NODATA" "false"
+L2_NODATA=$(echo "$FC" | jq -r '.loanForecasts[] | select(.loanId=="l2") | .noData')
+assert_eq "l2 无数据 noData=true" "$L2_NODATA" "true"
+assert_eq "l2 无法还清 payoffMonth=null" "$(echo "$FC" | jq -r '.loanForecasts[] | select(.loanId=="l2") | .payoffMonth')" "null"
+# Overall payoff should be null when any loan is unpayable
+assert_eq "总 payoff=null(有无法还清贷款)" "$(echo "$FC" | jq -r '.payoffMonth')" "null"
+L1_INTEREST=$(echo "$FC" | jq '.loanForecasts[] | select(.loanId=="l1") | .totalFutureInterest')
+if (( $(echo "$L1_INTEREST > 0" | bc -l) )); then ok "l1 总利息>0: $L1_INTEREST"; else bad "l1 总利息应>0"; fi
+
+# =====================================================================
+# 51. 预测 - 排除首付月
+# =====================================================================
+section "51. 预测排除首付月"
+load_state '{
+  "payers":[{"id":"p1","name":"A"},{"id":"p2","name":"B"}],
+  "loans":[{"id":"l1","name":"L","originalAmount":10000,"remainingPrincipal":9900}],
+  "downpayment":{"contributions":[{"payerId":"p1","amount":5000},{"payerId":"p2","amount":5000}]},
+  "months":[
+    {"yearMonth":"0000-00","mode":"auto","loanDetails":[],"payerPayments":[{"payerId":"p1","amount":5000},{"payerId":"p2","amount":5000}]},
+    {"yearMonth":"2024-01","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":100},{"payerId":"p2","amount":50}]}
+  ]
+}'
+FC_DP=$(curl -sf -X POST $URL/api/forecast -H content-type:application/json -d '{"windowMonths":0,"horizonMonths":3}')
+assert_eq "排除首付后 projection=3" "$(echo "$FC_DP" | jq '.projection|length')" "3"
+# Should average only the regular month (p1=100, p2=50), not downpayment (5000/5000)
+# If downpayment was included, avg p1 payment would be ~2550, not 100
+FC_P1_RATIO=$(echo "$FC_DP" | jq '.projection[0].ratios.p1')
+# p1 pays more → ratio should be > 0.5 but not close to 1.0 (which would happen if downpayment was counted)
+if (( $(echo "$FC_P1_RATIO < 0.9" | bc -l) )); then ok "排除首付: p1 ratio 合理 ($FC_P1_RATIO)"; else bad "首付未排除: p1 ratio=$FC_P1_RATIO 异常偏高"; fi
+
+# =====================================================================
+# 52. 快照下拉选择器
+# =====================================================================
+section "52. 快照下拉选择器"
+load_state '{
+  "payers":[{"id":"p1","name":"A"},{"id":"p2","name":"B"}],
+  "loans":[{"id":"l1","name":"L","originalAmount":10000,"remainingPrincipal":10000}],
+  "downpayment":null,
+  "months":[
+    {"yearMonth":"2024-01","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":100},{"payerId":"p2","amount":50}]},
+    {"yearMonth":"2024-02","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":120},{"payerId":"p2","amount":30}]}
+  ]
+}'
+visit; click_tab summary
+sleep 0.5
+# Snapshot select should exist and have options
+OPT_COUNT=$(peval "document.querySelector('#snapshotSelect').options.length")
+assert_eq "快照下拉含选项(当前+2月)" "$OPT_COUNT" "3"
+# Select 2024-01 → should show snapshot banner
+peval "(document.querySelector('#snapshotSelect').value='2024-01', document.querySelector('#snapshotSelect').dispatchEvent(new Event('change')), 'ok')" >/dev/null
+sleep 1
+BANNER_VIS=$(peval "String(document.querySelector('#snapshotBanner').style.cssText !== 'display:none !important')")
+assert_eq "选择后快照横幅可见" "$BANNER_VIS" "true"
+BANNER_LABEL=$(peval "document.querySelector('#snapshotLabel').textContent")
+assert_eq "横幅显示正确月份" "$BANNER_LABEL" "2024-01"
+# Select back to empty → banner hidden
+peval "(document.querySelector('#snapshotSelect').value='', document.querySelector('#snapshotSelect').dispatchEvent(new Event('change')), 'ok')" >/dev/null
+sleep 1
+BANNER_HIDDEN=$(peval "String(document.querySelector('#snapshotBanner').style.display)")
+assert_eq "返回当前后横幅隐藏" "$(echo "$BANNER_HIDDEN" | grep -qi 'none' && echo hidden || echo visible)" "hidden"
+
+# =====================================================================
+# 53. 编辑弹窗手动比例可见性
+# =====================================================================
+section "53. 编辑弹窗手动比例可见性"
+load_state '{
+  "payers":[{"id":"p1","name":"A"},{"id":"p2","name":"B"}],
+  "loans":[{"id":"l1","name":"L","originalAmount":10000,"remainingPrincipal":10000}],
+  "downpayment":null,
+  "months":[
+    {"yearMonth":"2024-01","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":100},{"payerId":"p2","amount":50}]}
+  ]
+}'
+visit; click_tab months
+# Open edit modal for auto month
+peval "document.querySelector('[onclick*=\"openMonthEdit\"]').click()" >/dev/null
+sleep 1
+# In auto mode, manual ratio section should be hidden
+MR_DISPLAY=$(peval "document.querySelector('#meManualWrap').style.display")
+assert_eq "自动模式手动比例隐藏" "$MR_DISPLAY" "none"
+# Switch to manual → should show
+peval "(document.querySelector('#meMode').value='manual', document.querySelector('#meMode').dispatchEvent(new Event('change')), 'ok')" >/dev/null
+sleep 0.5
+MR_DISPLAY2=$(peval "document.querySelector('#meManualWrap').style.display")
+assert_eq "手动模式手动比例显示" "$MR_DISPLAY2" ""
+# Switch back to auto → hide again
+peval "(document.querySelector('#meMode').value='auto', document.querySelector('#meMode').dispatchEvent(new Event('change')), 'ok')" >/dev/null
+sleep 0.5
+MR_DISPLAY3=$(peval "document.querySelector('#meManualWrap').style.display")
+assert_eq "切回自动手动比例再次隐藏" "$MR_DISPLAY3" "none"
+
+
+fi  # end of SANITY_ONLY guard (sections 1-53)
+
+# =====================================================================
+# 54. Sanity Test — 综合计算准确性验证
+# =====================================================================
+# 使用 mock 数据集验证全部计算路径（自动/手动/首付/负本金再分配/预测）。
+# 同时通过 API 和 UI 两端校验数据一致性。
+# --sanity-only 模式仅运行本 section。
+# =====================================================================
+section "54. Sanity Test — 综合计算准确性验证"
+
+# =====================================================================
+# MOCK 数据集
+# =====================================================================
+# 3 人 (p1=张三, p2=李四, p3=王五), p3 从 2024-03 起参与
+# 2 笔贷款 (l1=商贷 50万, l2=公积金 30万)
+# 首付: p1=20万, p2=10万
+# 9 条月份记录 (含首付月 0000-00):
+#   0000-00: 首付 (自动)
+#   2024-01: 自动 (2人)
+#   2024-02: 自动 (2人)
+#   2024-03: 自动 (3人, p3 加入)
+#   2024-04: 手动 (3人, 比例 0.5/0.3/0.2)
+#   2024-05: 自动 (3人, p2 欠款→负本金再分配)
+#   2024-06: 自动 (3人, 正常)
+#   2024-07: 手动 (3人, 比例 0.45/0.35/0.2, 还款<利息→本金=0)
+#   2024-08: 自动 (3人, 手动后恢复CP比例)
+# =====================================================================
+
+load_state '{
+  "payers":[
+    {"id":"p1","name":"张三","startMonth":null},
+    {"id":"p2","name":"李四","startMonth":null},
+    {"id":"p3","name":"王五","startMonth":"2024-03"}
+  ],
+  "loans":[
+    {"id":"l1","name":"商贷","originalAmount":500000,"remainingPrincipal":500000},
+    {"id":"l2","name":"公积金","originalAmount":300000,"remainingPrincipal":300000}
+  ],
+  "downpayment":{"contributions":[
+    {"payerId":"p1","amount":200000},
+    {"payerId":"p2","amount":100000},
+    {"payerId":"p3","amount":0}
+  ]},
+  "months":[
+    {"yearMonth":"0000-00","mode":"auto","loanDetails":[],
+      "payerPayments":[
+        {"payerId":"p1","amount":200000},
+        {"payerId":"p2","amount":100000}
+      ]},
+    {"yearMonth":"2024-01","mode":"auto",
+      "loanDetails":[
+        {"loanId":"l1","interest":2000,"principal":3000},
+        {"loanId":"l2","interest":1000,"principal":2000}
+      ],
+      "payerPayments":[
+        {"payerId":"p1","amount":5000},
+        {"payerId":"p2","amount":3000}
+      ]},
+    {"yearMonth":"2024-02","mode":"auto",
+      "loanDetails":[
+        {"loanId":"l1","interest":1950,"principal":3050},
+        {"loanId":"l2","interest":980,"principal":2020}
+      ],
+      "payerPayments":[
+        {"payerId":"p1","amount":5500},
+        {"payerId":"p2","amount":2500}
+      ]},
+    {"yearMonth":"2024-03","mode":"auto",
+      "loanDetails":[
+        {"loanId":"l1","interest":1900,"principal":3100},
+        {"loanId":"l2","interest":960,"principal":2040}
+      ],
+      "payerPayments":[
+        {"payerId":"p1","amount":4500},
+        {"payerId":"p2","amount":2500},
+        {"payerId":"p3","amount":1000}
+      ]},
+    {"yearMonth":"2024-04","mode":"manual",
+      "loanDetails":[
+        {"loanId":"l1","interest":1850,"principal":3150},
+        {"loanId":"l2","interest":940,"principal":2060}
+      ],
+      "payerPayments":[
+        {"payerId":"p1","amount":4000},
+        {"payerId":"p2","amount":3000},
+        {"payerId":"p3","amount":1000}
+      ],
+      "manualRatios":{"p1":0.5,"p2":0.3,"p3":0.2}},
+    {"yearMonth":"2024-05","mode":"auto",
+      "loanDetails":[
+        {"loanId":"l1","interest":1800,"principal":3200},
+        {"loanId":"l2","interest":920,"principal":2080}
+      ],
+      "payerPayments":[
+        {"payerId":"p1","amount":5000},
+        {"payerId":"p2","amount":500},
+        {"payerId":"p3","amount":2500}
+      ]},
+    {"yearMonth":"2024-06","mode":"auto",
+      "loanDetails":[
+        {"loanId":"l1","interest":1750,"principal":3250},
+        {"loanId":"l2","interest":900,"principal":2100}
+      ],
+      "payerPayments":[
+        {"payerId":"p1","amount":5200},
+        {"payerId":"p2","amount":2800},
+        {"payerId":"p3","amount":1500}
+      ]},
+    {"yearMonth":"2024-07","mode":"manual",
+      "loanDetails":[
+        {"loanId":"l1","interest":1700,"principal":3300},
+        {"loanId":"l2","interest":880,"principal":2120}
+      ],
+      "payerPayments":[
+        {"payerId":"p1","amount":1000},
+        {"payerId":"p2","amount":500},
+        {"payerId":"p3","amount":300}
+      ],
+      "manualRatios":{"p1":0.45,"p2":0.35,"p3":0.2}},
+    {"yearMonth":"2024-08","mode":"auto",
+      "loanDetails":[
+        {"loanId":"l1","interest":1650,"principal":3350},
+        {"loanId":"l2","interest":860,"principal":2150}
+      ],
+      "payerPayments":[
+        {"payerId":"p1","amount":5100},
+        {"payerId":"p2","amount":2700},
+        {"payerId":"p3","amount":1700}
+      ]}
+  ]
+}'
+
+STATE=$(curl -sf "$URL/api/state")
+
+# --- 基本结构 ---
+assert_eq "S 月份数=9" "$(echo "$STATE" | jq '.months|length')" "9"
+assert_eq "S 参还人=3" "$(echo "$STATE" | jq '.payers|length')" "3"
+assert_eq "S 贷款=2"   "$(echo "$STATE" | jq '.loans|length')" "2"
+
+# --- 首付月 (idx=0, 0000-00) ---
+# CP0+payment: p1=200000+200000=400000, p2=100000+100000=200000; ratio: p1=2/3, p2=1/3
+assert_near "S 首付 p1 CP" "$(api_computed 0 p1 cumulativePrincipal)" "400000"
+assert_near "S 首付 p2 CP" "$(api_computed 0 p2 cumulativePrincipal)" "200000"
+assert_near "S 首付 p1 ratio" "$(api_computed 0 p1 ratio)" "0.6667" 0.001
+assert_near "S 首付 p2 ratio" "$(api_computed 0 p2 ratio)" "0.3333" 0.001
+
+# --- 2024-01 自动 (idx=1) ---
+# prev_ratio: p1≈0.6667, p2≈0.3333; total_interest=3000
+# interest: p1=2000, p2=1000; raw: p1=3000, p2=2000; adj=raw
+# CP: p1=403000, p2=202000
+assert_near "S 01 p1 interest" "$(api_computed 1 p1 interestShare)" "2000" 1
+assert_near "S 01 p2 interest" "$(api_computed 1 p2 interestShare)" "1000" 1
+assert_near "S 01 p1 adj" "$(api_computed 1 p1 adjPrincipal)" "3000" 1
+assert_near "S 01 p2 adj" "$(api_computed 1 p2 adjPrincipal)" "2000" 1
+assert_near "S 01 p1 CP" "$(api_computed 1 p1 cumulativePrincipal)" "403000" 1
+assert_near "S 01 p2 CP" "$(api_computed 1 p2 cumulativePrincipal)" "202000" 1
+R01_SUM=$(awk -v a="$(api_computed 1 p1 ratio)" -v b="$(api_computed 1 p2 ratio)" 'BEGIN{printf "%.4f",a+b}')
+assert_near "S 01 Σratio=1" "$R01_SUM" "1.0000"
+
+# --- 2024-03 自动 (idx=3, p3加入) ---
+# p3 prev_ratio=0 (CP=0), p3 interestShare=0, p3 raw=1000
+assert_near "S 03 p3 interest" "$(api_computed 3 p3 interestShare)" "0" 1
+assert_near "S 03 p3 adj" "$(api_computed 3 p3 adjPrincipal)" "1000" 1
+R03_SUM=$(awk -v a="$(api_computed 3 p1 ratio)" -v b="$(api_computed 3 p2 ratio)" -v c="$(api_computed 3 p3 ratio)" 'BEGIN{printf "%.4f",a+b+c}')
+assert_near "S 03 Σratio=1" "$R03_SUM" "1.0000"
+P3_R03=$(api_computed 3 p3 ratio)
+if (( $(echo "$P3_R03 < 0.01" | bc -l) )); then ok "S 03 p3 ratio<0.01: $P3_R03"; else bad "S 03 p3 ratio=$P3_R03 应<0.01"; fi
+
+# --- 2024-04 手动 (idx=4) ---
+# manualRatios: p1=0.5, p2=0.3, p3=0.2
+# total_interest=2790, total_payments=8000, actual_principal=5210
+# adj: p1=2605, p2=1563, p3=1042
+assert_near "S 04 p1 ratio" "$(api_computed 4 p1 ratio)" "0.5" 0.001
+assert_near "S 04 p2 ratio" "$(api_computed 4 p2 ratio)" "0.3" 0.001
+assert_near "S 04 p3 ratio" "$(api_computed 4 p3 ratio)" "0.2" 0.001
+assert_near "S 04 p1 adj" "$(api_computed 4 p1 adjPrincipal)" "2605" 1
+assert_near "S 04 p2 adj" "$(api_computed 4 p2 adjPrincipal)" "1563" 1
+assert_near "S 04 p3 adj" "$(api_computed 4 p3 adjPrincipal)" "1042" 1
+
+# --- 2024-05 自动 (idx=5, p2欠款→负本金再分配) ---
+# p2 payment=500 < interest share → raw<0 → adj=0
+P2_ADJ_05=$(api_computed 5 p2 adjPrincipal)
+assert_near "S 05 p2 adj=0" "$P2_ADJ_05" "0" 0.01
+P1_ADJ_05=$(api_computed 5 p1 adjPrincipal)
+if (( $(echo "$P1_ADJ_05 > 0" | bc -l) )); then ok "S 05 p1 adj>0 含垫付: $P1_ADJ_05"; else bad "S 05 p1 adj应>0"; fi
+R05_SUM=$(awk -v a="$(api_computed 5 p1 ratio)" -v b="$(api_computed 5 p2 ratio)" -v c="$(api_computed 5 p3 ratio)" 'BEGIN{printf "%.4f",a+b+c}')
+assert_near "S 05 Σratio=1" "$R05_SUM" "1.0000"
+
+# --- 2024-07 手动 (idx=7, 还款<利息→本金=0) ---
+# total_interest=2580, total_payments=1800, actual_principal=0
+assert_near "S 07 p1 adj" "$(api_computed 7 p1 adjPrincipal)" "0" 0.01
+assert_near "S 07 p2 adj" "$(api_computed 7 p2 adjPrincipal)" "0" 0.01
+assert_near "S 07 p3 adj" "$(api_computed 7 p3 adjPrincipal)" "0" 0.01
+assert_near "S 07 p1 ratio" "$(api_computed 7 p1 ratio)" "0.45" 0.001
+assert_near "S 07 p2 ratio" "$(api_computed 7 p2 ratio)" "0.35" 0.001
+assert_near "S 07 p3 ratio" "$(api_computed 7 p3 ratio)" "0.2" 0.001
+
+# --- 2024-08 自动 (idx=8, 手动后恢复CP比例) ---
+R08_SUM=$(awk -v a="$(api_computed 8 p1 ratio)" -v b="$(api_computed 8 p2 ratio)" -v c="$(api_computed 8 p3 ratio)" 'BEGIN{printf "%.4f",a+b+c}')
+assert_near "S 08 Σratio=1" "$R08_SUM" "1.0000"
+R08_P1=$(api_computed 8 p1 ratio)
+if [[ "$R08_P1" != "0.45" ]]; then ok "S 08 p1≠0.45 恢复CP: $R08_P1"; else bad "S 08 p1=0.45 未恢复CP"; fi
+
+# --- CP 递增验证 ---
+P1_CP_01=$(api_computed 1 p1 cumulativePrincipal)
+P1_CP_08=$(api_computed 8 p1 cumulativePrincipal)
+if (( $(echo "$P1_CP_08 > $P1_CP_01" | bc -l) )); then ok "S p1 CP 增长: ${P1_CP_01} -> ${P1_CP_08}"; else bad "S p1 CP 未增长"; fi
+
+# --- 贷款剩余本金 ---
+# l1 paid = 3000+3050+3100+3150+3200+3250+3300+3350 = 25400 → remaining = 474600
+# l2 paid = 2000+2020+2040+2060+2080+2100+2120+2150 = 16570 → remaining = 283430
+L1_REM=$(echo "$STATE" | jq -r '.loans[] | select(.id=="l1") | .remainingPrincipal')
+L2_REM=$(echo "$STATE" | jq -r '.loans[] | select(.id=="l2") | .remainingPrincipal')
+assert_near "S l1 剩余本金" "$L1_REM" "474600" 1
+assert_near "S l2 剩余本金" "$L2_REM" "283430" 1
+
+# ---- UI 校验 (Playwright) ----
+visit
+sleep 0.3
+
+# 月份 Tab → 验证月份行渲染和 ratio 显示
+click_tab months
+sleep 0.3
+# 最后一行 2024-08 的 ratio 应该和 API 一致
+UI_R08_P1=$(read_testid "month-ratio-2024-08-p1")
+API_R08_P1=$(api_computed 8 p1 ratio)
+# UI 显示是百分比 (e.g. "66.12%"), API 是小数
+if [[ -n "$UI_R08_P1" ]]; then ok "S UI 08 p1 ratio 有值: $UI_R08_P1"; else bad "S UI 08 p1 ratio 为空"; fi
+
+# 汇总 Tab → CP 和 ratio
+click_tab summary
+sleep 0.3
+UI_CP_P1=$(read_testid "summary-payer-cp-p1")
+if [[ -n "$UI_CP_P1" ]]; then ok "S UI 汇总 p1 CP 有值: $UI_CP_P1"; else bad "S UI 汇总 p1 CP 为空"; fi
+UI_RATIO_P1=$(read_testid "summary-payer-ratio-p1")
+if [[ -n "$UI_RATIO_P1" ]]; then ok "S UI 汇总 p1 ratio 有值: $UI_RATIO_P1"; else bad "S UI 汇总 p1 ratio 为空"; fi
+# 验证贷款剩余本金显示
+UI_L1_REM=$(read_testid "summary-loan-remaining-l1")
+if [[ -n "$UI_L1_REM" ]]; then ok "S UI 汇总 l1 剩余有值: $UI_L1_REM"; else bad "S UI 汇总 l1 剩余为空"; fi
+
+# 预测 Tab → 运行预测并验证 UI
+click_tab forecast
+sleep 0.3
+PCLI fill "[data-testid=\"forecast-window-input\"]" "0" >/dev/null
+PCLI fill "[data-testid=\"forecast-horizon-input\"]" "24" >/dev/null
+click_testid "forecast-run-btn"
+sleep 1
+
+# payoff month 应有值
+UI_PAYOFF=$(read_testid "forecast-payoff-month")
+if [[ -n "$UI_PAYOFF" && "$UI_PAYOFF" != "-" ]]; then ok "S UI payoff 有值: $UI_PAYOFF"; else bad "S UI payoff 为空或'-'"; fi
+
+# 每笔贷款利息预测应有值
+UI_L1_INT=$(read_testid "forecast-loan-interest-l1")
+if [[ -n "$UI_L1_INT" ]]; then ok "S UI l1 利息预测有值: $UI_L1_INT"; else bad "S UI l1 利息预测为空"; fi
+UI_L2_INT=$(read_testid "forecast-loan-interest-l2")
+if [[ -n "$UI_L2_INT" ]]; then ok "S UI l2 利息预测有值: $UI_L2_INT"; else bad "S UI l2 利息预测为空"; fi
+
+# 预测终态 ratio 有值
+UI_FC_P1=$(read_testid "forecast-final-ratio-p1")
+if [[ -n "$UI_FC_P1" && "$UI_FC_P1" != "-" ]]; then ok "S UI 预测终态 p1: $UI_FC_P1"; else bad "S UI 预测终态 p1 为空"; fi
+
+# ---- API 预测校验 ----
+FC_ALL=$(curl -sf -X POST "$URL/api/forecast" -H content-type:application/json -d '{"windowMonths":0,"horizonMonths":24}')
+assert_eq "S 全月 projection=24" "$(echo "$FC_ALL" | jq '.projection|length')" "24"
+assert_eq "S 全月 loanForecasts=2" "$(echo "$FC_ALL" | jq '.loanForecasts|length')" "2"
+
+LF1_ALL=$(echo "$FC_ALL" | jq '.loanForecasts[] | select(.loanId=="l1")')
+LF2_ALL=$(echo "$FC_ALL" | jq '.loanForecasts[] | select(.loanId=="l2")')
+assert_eq "S l1 noData=false" "$(echo "$LF1_ALL" | jq -r '.noData')" "false"
+assert_eq "S l2 noData=false" "$(echo "$LF2_ALL" | jq -r '.noData')" "false"
+
+LF1_MONTHS=$(echo "$LF1_ALL" | jq '.monthsToPayoff')
+LF2_MONTHS=$(echo "$LF2_ALL" | jq '.monthsToPayoff')
+if (( $(echo "$LF1_MONTHS > 0" | bc -l) )); then ok "S l1 还清月>0: $LF1_MONTHS"; else bad "S l1 还清月应>0"; fi
+if (( $(echo "$LF2_MONTHS > 0" | bc -l) )); then ok "S l2 还清月>0: $LF2_MONTHS"; else bad "S l2 还清月应>0"; fi
+LF1_INT=$(echo "$LF1_ALL" | jq '.totalFutureInterest')
+LF2_INT=$(echo "$LF2_ALL" | jq '.totalFutureInterest')
+if (( $(echo "$LF1_INT > 0" | bc -l) )); then ok "S l1 总利息>0: $LF1_INT"; else bad "S l1 总利息应>0"; fi
+if (( $(echo "$LF2_INT > 0" | bc -l) )); then ok "S l2 总利息>0: $LF2_INT"; else bad "S l2 总利息应>0"; fi
+
+assert_nonempty "S payoffMonth" "$(echo "$FC_ALL" | jq -r '.payoffMonth')"
+
+# ratio sum=1 across projection
+for IDX in 0 11 23; do
+  RS=$(echo "$FC_ALL" | jq "[.projection[$IDX].ratios.p1, .projection[$IDX].ratios.p2, .projection[$IDX].ratios.p3] | add")
+  assert_near "S proj[$IDX] Σratio" "$RS" "1.0000"
+done
+
+# p1 ratio should stay dominant (>50%) throughout projection
+P1_FIRST=$(echo "$FC_ALL" | jq '.projection[0].ratios.p1')
+P1_LAST=$(echo "$FC_ALL" | jq '.projection[23].ratios.p1')
+if (( $(echo "$P1_LAST > 0.5" | bc -l) )); then ok "S p1 ratio 始终>50%: ${P1_FIRST} -> ${P1_LAST}"; else bad "S p1 ratio 应>50%: $P1_LAST"; fi
+
+# series arrays match projection
+assert_eq "S series.p1=24" "$(echo "$FC_ALL" | jq '.series.p1|length')" "24"
+assert_eq "S series.p3=24" "$(echo "$FC_ALL" | jq '.series.p3|length')" "24"
+
+# 还清月数合理性 (l1≈150, l2≈137)
+assert_near "S l1 还清月合理" "$LF1_MONTHS" "150" 10
+assert_near "S l2 还清月合理" "$LF2_MONTHS" "137" 10
+
+# payoff 年份>2030（验证首付月被排除）
+PAYOFF_YM=$(echo "$FC_ALL" | jq -r '.payoffMonth')
+PAYOFF_Y=${PAYOFF_YM%%-*}
+if (( PAYOFF_Y > 2030 )); then ok "S payoff>2030: $PAYOFF_YM"; else bad "S payoff=$PAYOFF_YM 过早"; fi
+
+# ---- 选定月回测 (仅自动月) ----
+FC_SEL=$(curl -sf -X POST "$URL/api/forecast" -H content-type:application/json \
+  -d '{"selectedMonths":["2024-01","2024-02","2024-03","2024-05","2024-06","2024-08"],"horizonMonths":12}')
+assert_eq "S 选定月 projection=12" "$(echo "$FC_SEL" | jq '.projection|length')" "12"
+R_ALL_0=$(echo "$FC_ALL" | jq '.projection[0].ratios.p1')
+R_SEL_0=$(echo "$FC_SEL" | jq '.projection[0].ratios.p1')
+if [[ "$R_ALL_0" != "$R_SEL_0" ]]; then
+  ok "S 选定 vs 全部 ratio 不同 (all=$R_ALL_0 sel=$R_SEL_0)"
+else
+  bad "S 选定 vs 全部 ratio 应不同"
+fi
+
+# ---- 选定手动月回测 ----
+FC_MAN=$(curl -sf -X POST "$URL/api/forecast" -H content-type:application/json \
+  -d '{"selectedMonths":["2024-04","2024-07"],"horizonMonths":6}')
+assert_eq "S 手动月 projection=6" "$(echo "$FC_MAN" | jq '.projection|length')" "6"
+RS_MAN=$(echo "$FC_MAN" | jq '[.projection[0].ratios.p1, .projection[0].ratios.p2, .projection[0].ratios.p3] | add')
+assert_near "S 手动月 Σratio=1" "$RS_MAN" "1.0000"
+R_MAN_P1=$(echo "$FC_MAN" | jq '.projection[0].ratios.p1')
+if (( $(echo "$R_SEL_0 > $R_MAN_P1" | bc -l) )); then
+  ok "S 自动>手动 p1 ratio (auto=$R_SEL_0 manual=$R_MAN_P1)"
+else
+  bad "S 应 自动>手动 p1 ratio"
+fi
+
+# ---- 月份详情 API ----
+D_AUTO=$(curl -sf "$URL/api/months/2024-01/detail")
+assert_eq "S 01 detail mode=auto" "$(echo "$D_AUTO" | jq -r '.mode')" "auto"
+assert_eq "S 01 detail 含 Step 1" "$(echo "$D_AUTO" | jq -r '.steps[]' | grep -q 'Step 1' && echo found || echo missing)" "found"
+
+D_MAN=$(curl -sf "$URL/api/months/2024-04/detail")
+assert_eq "S 04 detail mode=manual" "$(echo "$D_MAN" | jq -r '.mode')" "manual"
+assert_eq "S 04 detail 含手动标识" "$(echo "$D_MAN" | jq -r '.steps[]' | grep -q '手动比例月份' && echo found || echo missing)" "found"
+
+D_MAN7=$(curl -sf "$URL/api/months/2024-07/detail")
+assert_eq "S 07 detail 含实际本金" "$(echo "$D_MAN7" | jq -r '.steps[]' | grep -q '实际本金' && echo found || echo missing)" "found"
+
+# ---- 边界: 100%/0% 参还人预测不应泄漏比例 ----
+load_state '{
+  "payers":[{"id":"p1","name":"Haoyun"},{"id":"p2","name":"Min"}],
+  "loans":[
+    {"id":"l1","name":"商贷","originalAmount":600000,"remainingPrincipal":600000},
+    {"id":"l2","name":"公积金","originalAmount":800000,"remainingPrincipal":800000}
+  ],
+  "downpayment":{"contributions":[{"payerId":"p1","amount":700000},{"payerId":"p2","amount":0}]},
+  "months":[
+    {"yearMonth":"0000-00","mode":"auto","loanDetails":[],
+      "payerPayments":[{"payerId":"p1","amount":700000},{"payerId":"p2","amount":0}]},
+    {"yearMonth":"2025-01","mode":"manual",
+      "loanDetails":[{"loanId":"l1","interest":3000,"principal":2000},{"loanId":"l2","interest":2500,"principal":1500}],
+      "payerPayments":[{"payerId":"p1","amount":5000},{"payerId":"p2","amount":0}],
+      "manualRatios":{"p1":1.0,"p2":0.0}},
+    {"yearMonth":"2025-02","mode":"manual",
+      "loanDetails":[{"loanId":"l1","interest":2900,"principal":2100},{"loanId":"l2","interest":2400,"principal":1600}],
+      "payerPayments":[{"payerId":"p1","amount":5000},{"payerId":"p2","amount":0}],
+      "manualRatios":{"p1":1.0,"p2":0.0}}
+  ]
+}'
+
+# CP should be: p1=1400000 (700000 dp + 700000 payment), p2=0
+EDGE_STATE=$(curl -sf "$URL/api/state")
+EDGE_P2_CP=$(echo "$EDGE_STATE" | jq '.months[-1].computed.perPayer.p2.cumulativePrincipal')
+assert_near "S 边界 p2 CP=0" "$EDGE_P2_CP" "0" 0.01
+EDGE_P1_R=$(echo "$EDGE_STATE" | jq '.months[-1].computed.perPayer.p1.ratio')
+assert_near "S 边界 p1 ratio=1" "$EDGE_P1_R" "1.0" 0.0001
+
+# Forecast: p2 should remain 0% throughout all projection months
+EDGE_FC=$(curl -sf -X POST "$URL/api/forecast" -H content-type:application/json -d '{"windowMonths":0,"horizonMonths":12}')
+EDGE_FC_P2_0=$(echo "$EDGE_FC" | jq '.projection[0].ratios.p2')
+EDGE_FC_P2_11=$(echo "$EDGE_FC" | jq '.projection[11].ratios.p2')
+assert_near "S 边界 预测首月 p2=0" "$EDGE_FC_P2_0" "0" 0.0001
+assert_near "S 边界 预测末月 p2=0" "$EDGE_FC_P2_11" "0" 0.0001
+EDGE_FC_P1_11=$(echo "$EDGE_FC" | jq '.projection[11].ratios.p1')
+assert_near "S 边界 预测末月 p1=1" "$EDGE_FC_P1_11" "1.0" 0.0001
+
+# Verify via UI too
+visit
+click_tab forecast
+sleep 0.3
+PCLI fill "[data-testid=\"forecast-window-input\"]" "0" >/dev/null
+PCLI fill "[data-testid=\"forecast-horizon-input\"]" "12" >/dev/null
+click_testid "forecast-run-btn"
+sleep 1
+UI_EDGE_P1=$(read_testid "forecast-final-ratio-p1")
+UI_EDGE_P2=$(read_testid "forecast-final-ratio-p2")
+assert_eq "S 边界 UI p1=100%" "$UI_EDGE_P1" "100.00%"
+assert_eq "S 边界 UI p2=0%" "$UI_EDGE_P2" "0.00%"
 
 
 TOTAL=$((PASS+FAIL))

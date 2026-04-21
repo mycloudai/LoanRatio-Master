@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
 
-> **核心思路**：每月还款中，先按上月权益比例扣除各自应承担的利息，剩余部分才是真正在"还本金"——谁多还本金，谁的产权占比就会增长。
+> **核心思路**：每月还款中，先按上月权益比例扣除各自应承担的利息，剩余部分才是真正在"还本金"——谁多还本金，谁的产权占比就会增长。特殊月份也可手动指定比例，当月的本金按指定比例计入各人账上，下月恢复自动时系统会根据所有历史累计本金重新推算。
 >
 > **本金归因模型**：首付计入初始累计本金 → 每月用上月权益比例分摊利息 → 实际还款减去利息得到净本金贡献 → 净本金累加到各自的累计本金 → 由累计本金比例得出新的权益占比。其中"上月权益比例"即各人截至上月的累计本金占所有人累计本金总和的比值，首月则以首付比例为初始值。如此逐月迭代，权益比例始终反映每个人实际承担的本金总额。
 >
@@ -98,9 +98,13 @@ $$r_i(t) = \frac{CP_i(t)}{CP(t)}$$
 
 用户直接指定本月各参还人权益比例（总和 100%），当月本金按手动比例计入 $CP_i$：
 
-$$p_i^{\text{adj}}(t) = r_i^{\text{manual}} \times P(t)$$
+$$P^{\text{actual}}(t) = \max\!\Big(0,\;\sum_i \text{pay}_i(t) - I(t)\Big)$$
+
+$$p_i^{\text{adj}}(t) = r_i^{\text{manual}} \times P^{\text{actual}}(t)$$
 
 $$CP_i(t) = CP_i(t-1) + p_i^{\text{adj}}(t)$$
+
+其中 $P^{\text{actual}}(t)$ 为所有参还人实际还款总额减去利息，即真实的本金贡献；若还款不足以覆盖利息则为零。
 
 利息分摊同样按手动比例计算：$\text{interestShare}_i(t) = r_i^{\text{manual}} \times I(t)$。
 

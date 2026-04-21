@@ -9,8 +9,6 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
   integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
-  integrity="sha384-y1IFGbY2eSvHwoLaqjTvHsCe/EbTGtRcOMxZBlR2/CbY4qZkPEhpqzBSJ4IAW0bL" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <style>
   :root {
@@ -324,7 +322,7 @@
       <button class="btn btn-sm btn-outline-primary" id="snapshotExitBtn">返回当前</button>
     </div>
     <div class="card mb-3"><div class="card-body">
-      <h6 id="summaryPayersTitle">各参还人当前权益</h6>
+      <h6 id="summaryPayersTitle">各参还人最新累计权益</h6>
       <div id="summaryPayers"></div>
     </div></div>
     <div class="card mb-3"><div class="card-body">
@@ -340,6 +338,16 @@
     </div></div>
     <div class="card mb-3"><div class="card-body table-responsive">
       <table class="table table-sm table-sticky-col" id="summaryHistoryTable"></table>
+    </div></div>
+    <div class="card mb-3"><div class="card-body">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-clock-history"></i>
+        <label class="form-label mb-0 fw-semibold">查看历史快照：</label>
+        <select class="form-select form-select-sm w-auto" id="snapshotSelect" data-testid="snapshot-select">
+          <option value="">当前（最新）</option>
+        </select>
+        <span class="small-muted">选择月份后以只读模式查看该时间点的权益状态</span>
+      </div>
     </div></div>
   </div>
 
@@ -368,7 +376,7 @@
           <input type="number" class="form-control" value="0" id="forecastWindowInput" data-testid="forecast-window-input">
         </div>
         <div class="col-md-3">
-          <label class="form-label">预测时长（月）</label>
+          <label class="form-label">向未来预测月数</label>
           <input type="number" class="form-control" value="12" id="forecastHorizonInput" data-testid="forecast-horizon-input">
         </div>
         <div class="col-md-3">
@@ -376,9 +384,10 @@
         </div>
       </div>
       <div class="mt-3">预测贷款结清月份：<span data-testid="forecast-payoff-month" id="forecastPayoffMonth">-</span></div>
-      <div class="small-muted">预测数据为估算值，仅供参考。</div>
+      <div class="small-muted">预测数据为估算值，仅供参考。首付不参与预测计算。</div>
+      <div class="mt-3" id="forecastLoanInterest"></div>
       <div class="mt-3" id="forecastFinalRatios"></div>
-      <canvas id="forecastChart" style="margin-top:16px; max-height:400px;"></canvas>
+      <div id="forecastChartWrap" style="margin-top:16px;"></div>
     </div></div>
   </div>
 </div>
@@ -481,6 +490,23 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============== CONFIRM MODAL ============== -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmModalTitle">确认</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="confirmModalBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="confirmModalCancel" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="confirmModalOk">确定</button>
       </div>
     </div>
   </div>
@@ -862,6 +888,35 @@ document.querySelectorAll('input[name=monthMode]').forEach(r => r.addEventListen
   $('monthManualFields').style.display = mode==='manual' ? '' : 'none';
 }));
 
+function showConfirmModal(title, body) {
+  return new Promise(resolve => {
+    $('confirmModalTitle').textContent = title;
+    $('confirmModalBody').innerHTML = body;
+    const modal = new bootstrap.Modal($('confirmModal'));
+    const okBtn = $('confirmModalOk');
+    const cleanup = () => { okBtn.removeEventListener('click', onOk); $('confirmModal').removeEventListener('hidden.bs.modal', onHide); };
+    let answered = false;
+    const onOk = () => { answered = true; cleanup(); modal.hide(); resolve(true); };
+    const onHide = () => { if (!answered) { cleanup(); resolve(false); } };
+    okBtn.addEventListener('click', onOk);
+    $('confirmModal').addEventListener('hidden.bs.modal', onHide);
+    modal.show();
+  });
+}
+
+async function checkPaymentMismatch(loanDetails, payerPayments) {
+  const bankTotal = loanDetails.reduce((s, ld) => s + (ld.interest||0) + (ld.principal||0), 0);
+  const payerTotal = payerPayments.reduce((s, pp) => s + (pp.amount||0), 0);
+  if (Math.abs(bankTotal - payerTotal) > 0.01) {
+    return showConfirmModal('还款金额不一致',
+      `<p>银行应还款总额 <b>${fmtCny(bankTotal)}</b> 与参还人还款总额 <b>${fmtCny(payerTotal)}</b> 不一致，`
+      + `差额 <b>${fmtCny(payerTotal - bankTotal)}</b>。</p>`
+      + '<p class="text-muted mb-0">可能原因：填写错误、延期还款、提前还款等。<br>点击"确定"继续按实际填写金额保存。</p>'
+    );
+  }
+  return true;
+}
+
 $('monthCreateBtn').addEventListener('click', () => withLoading($('monthCreateBtn'), async () => {
   const yearMonth = $('monthYearMonthInput').value.trim();
   if (!yearMonth) { showToast('请填写年月', 'error'); return; }
@@ -877,6 +932,7 @@ $('monthCreateBtn').addEventListener('click', () => withLoading($('monthCreateBt
   $('monthPayerPaymentFields').querySelectorAll('input[data-payerid]').forEach(i => {
     const v = parseFloat(i.value); payerPayments.push({ payerId: i.dataset.payerid, amount: isNaN(v)?0:v });
   });
+  if (!(await checkPaymentMismatch(loanDetails, payerPayments))) return;
   const body = { yearMonth, mode, loanDetails, payerPayments };
   if (mode === 'manual') {
     const manualRatios = {};
@@ -938,9 +994,11 @@ function renderMonthsList() {
                <td class="ratio-cell col-extra" data-testid="month-interest-share-${esc(m.yearMonth)}-${esc(p.id)}">${iShare}</td>
                <td class="ratio-cell" data-testid="month-ratio-${esc(m.yearMonth)}-${esc(p.id)}">${ratio}</td>`;
     });
+    const isLast = m === months[months.length - 1];
     html += `<td>
       <button class="btn btn-sm btn-outline-info" data-testid="month-detail-${esc(m.yearMonth)}" onclick="openDetail('${esc(m.yearMonth)}')"><i class="bi bi-info-circle me-1"></i>详情</button>
       <button class="btn btn-sm btn-outline-primary" onclick="openMonthEdit('${esc(m.yearMonth)}')"><i class="bi bi-pencil me-1"></i>修改</button>
+      ${isLast ? `<button class="btn btn-sm btn-outline-danger" data-testid="month-delete-${esc(m.yearMonth)}" onclick="onMonthDelete('${esc(m.yearMonth)}')"><i class="bi bi-trash3 me-1"></i>删除</button>` : ''}
     </td></tr>`;
   });
   html += '</tbody></table></div>';
@@ -958,6 +1016,16 @@ $('monthsToggleExtra').addEventListener('click', () => {
     : '<i class="bi bi-arrows-expand"></i> 详细列';
 });
 
+async function onMonthDelete(ym) {
+  const ok = await showConfirmModal('删除月份', `确定删除 <b>${esc(ym)}</b> 月份？此操作不可撤销。`);
+  if (!ok) return;
+  try {
+    await api('DELETE', '/api/months/' + ym);
+    await loadState();
+    showToast('已删除 ' + ym);
+  } catch(e) { showToast('删除失败：' + e.message, 'error'); }
+}
+
 window.openDetail = async function(ym) {
   try {
     const detail = await api('GET', '/api/months/'+ym+'/detail');
@@ -970,18 +1038,32 @@ window.openDetail = async function(ym) {
     if (detail.steps && detail.steps.length) {
       html += '<h6>计算步骤</h6><div class="formula">'+detail.steps.map(s=>esc(s)).join('\n')+'</div>';
     }
-    html += '<h6 class="mt-3">每位参还人</h6><table class="table table-sm"><thead><tr><th>姓名</th><th>还款</th><th>承担利息</th><th>原始净本金</th><th>调整后净本金</th><th>累计本金</th><th>本月比例</th></tr></thead><tbody>';
-    (payers).forEach(p => {
-      const r = (detail.perPayer||{})[p.id] || {};
-      html += `<tr><td>${esc(p.name)}</td>
-        <td>${fmtCny(r.payment)}</td>
-        <td>${fmtCny(r.interestShare)}</td>
-        <td>${fmtCny(r.rawPrincipal)}</td>
-        <td>${fmtCny(r.adjPrincipal)}</td>
-        <td>${fmtCny(r.cumulativePrincipal)}</td>
-        <td>${fmtPct(r.ratio)}</td></tr>`;
-    });
-    html += '</tbody></table>';
+    if (detail.mode === 'manual') {
+      html += '<h6 class="mt-3">每位参还人</h6><table class="table table-sm"><thead><tr><th>姓名</th><th>还款额</th><th>手动比例</th><th>计入本金</th><th>累计本金</th></tr></thead><tbody>';
+      (payers).forEach(p => {
+        const r = (detail.perPayer||{})[p.id] || {};
+        const mr = (detail.manualRatios||{})[p.id];
+        html += `<tr><td>${esc(p.name)}</td>
+          <td>${fmtCny(r.payment)}</td>
+          <td>${mr!=null ? (mr*100).toFixed(2)+'%' : '-'}</td>
+          <td>${fmtCny(r.adjPrincipal)}</td>
+          <td>${fmtCny(r.cumulativePrincipal)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<h6 class="mt-3">每位参还人</h6><table class="table table-sm"><thead><tr><th>姓名</th><th>还款</th><th>承担利息</th><th>原始净本金</th><th>调整后净本金</th><th>累计本金</th><th>本月比例</th></tr></thead><tbody>';
+      (payers).forEach(p => {
+        const r = (detail.perPayer||{})[p.id] || {};
+        html += `<tr><td>${esc(p.name)}</td>
+          <td>${fmtCny(r.payment)}</td>
+          <td>${fmtCny(r.interestShare)}</td>
+          <td>${fmtCny(r.rawPrincipal)}</td>
+          <td>${fmtCny(r.adjPrincipal)}</td>
+          <td>${fmtCny(r.cumulativePrincipal)}</td>
+          <td>${fmtPct(r.ratio)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
     if (detail.redistribution && detail.redistribution.length) {
       html += '<h6>负本金再分配</h6><div class="formula">'+detail.redistribution.map(s=>esc(s)).join('\n')+'</div>';
     }
@@ -1026,13 +1108,19 @@ window.openMonthEdit = function(ym) {
       <div class="col-md-6"><input type="number" class="form-control form-control-sm me-pay" data-id="${esc(p.id)}" value="${ppMap[p.id]||0}"></div>
     </div>`;
   });
+  html += '<div id="meManualWrap" style="display:' + (m.mode==='manual'?'':'none') + ';">';
   html += '<h6 class="mt-2">手动比例（仅手动模式）</h6>';
   payers.forEach(p => {
     html += `<div class="row g-2 mb-1"><div class="col-md-3">${esc(p.name)}</div>
       <div class="col-md-6"><input type="number" step="0.0001" class="form-control form-control-sm me-mr" data-id="${esc(p.id)}" value="${mrMap[p.id]!=null?mrMap[p.id]:''}"></div>
     </div>`;
   });
+  html += '</div>';
   $('monthEditBody').innerHTML = html;
+  // Toggle manual ratio section visibility on mode change
+  $('meMode').addEventListener('change', () => {
+    $('meManualWrap').style.display = $('meMode').value === 'manual' ? '' : 'none';
+  });
   $('monthEditSaveBtn').onclick = () => withLoading($('monthEditSaveBtn'), async () => {
     if (cascade>0 && !confirm(`将重算 ${cascade} 个后续月份。继续？`)) return;
     const mode = $('meMode').value;
@@ -1045,6 +1133,7 @@ window.openMonthEdit = function(ym) {
       payerId: p.id,
       amount: parseFloat($('monthEditBody').querySelector('.me-pay[data-id="'+p.id+'"]').value)||0
     }));
+    if (!(await checkPaymentMismatch(loanDetails, payerPayments))) return;
     const body = { mode, loanDetails, payerPayments };
     if (mode === 'manual') {
       const manualRatios = {}; let s = 0;
@@ -1072,6 +1161,12 @@ $('snapshotExitBtn').addEventListener('click', () => {
   renderSummary();
 });
 
+$('snapshotSelect').addEventListener('change', () => {
+  const v = $('snapshotSelect').value;
+  summarySnapshotYm = v || null;
+  renderSummary();
+});
+
 async function renderSummary() {
   let summary;
   try { summary = await api('GET', '/api/summary'); }
@@ -1089,7 +1184,7 @@ async function renderSummary() {
     $('summaryPayersTitle').textContent = `各参还人权益（截至 ${summarySnapshotYm}）`;
   } else {
     banner.style.cssText = 'display:none !important';
-    $('summaryPayersTitle').textContent = '各参还人当前权益';
+    $('summaryPayersTitle').textContent = '各参还人最新累计权益';
   }
 
   // Determine which month's data to show in the payer summary
@@ -1102,13 +1197,15 @@ async function renderSummary() {
   const snapPer = snapMonth ? (snapMonth.computed || {}).perPayer || {} : {};
 
   if (isSnapshot && snapMonth) {
+    const totalCp = allPayers.reduce((s, p) => s + ((snapPer[p.id] || {}).cumulativePrincipal || 0), 0);
     $('summaryPayers').innerHTML = allPayers.length ? '<table class="table table-sm table-striped"><thead><tr><th>姓名</th><th>累计净本金</th><th>权益比例</th></tr></thead><tbody>' +
       allPayers.map(p => {
         const info = snapPer[p.id] || {};
-        const ratio = info.ratio;
+        const cp = info.cumulativePrincipal || 0;
+        const ratio = totalCp > 0 ? cp / totalCp : 0;
         return `<tr>
         <td>${esc(p.name)}</td>
-        <td class="ratio-cell">${fmtCny(info.cumulativePrincipal)}</td>
+        <td class="ratio-cell">${fmtCny(cp)}</td>
         <td><div class="d-flex align-items-center gap-2">
           <div class="progress flex-grow-1" style="height:6px; min-width:60px;">
             <div class="progress-bar" style="width:${(ratio||0)*100}%; background:var(--lr-primary);"></div>
@@ -1118,7 +1215,7 @@ async function renderSummary() {
       </tr>`;
       }).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-people"></i>暂无数据</div>';
   } else {
-    $('summaryPayers').innerHTML = allPayers.length ? '<table class="table table-sm table-striped"><thead><tr><th>姓名</th><th>累计净本金</th><th>当前权益</th></tr></thead><tbody>' +
+    $('summaryPayers').innerHTML = allPayers.length ? '<table class="table table-sm table-striped"><thead><tr><th>姓名</th><th>累计净本金</th><th>最新权益比例</th></tr></thead><tbody>' +
       allPayers.map(p => `<tr>
         <td>${esc(p.name)}</td>
         <td class="ratio-cell" data-testid="summary-payer-cp-${esc(p.id)}">${fmtCny(p.cumulativePrincipal)}</td>
@@ -1197,10 +1294,14 @@ async function renderSummary() {
       if (ym) openDetail(ym);
     });
   });
+
+  // Populate snapshot select dropdown
+  const snapSel = $('snapshotSelect');
+  snapSel.innerHTML = '<option value="">当前（最新）</option>' +
+    allMonths.map(m => `<option value="${esc(m.yearMonth)}"${summarySnapshotYm===m.yearMonth?' selected':''}>${esc(m.yearMonth)}</option>`).join('');
 }
 
 // ====================== Forecast ======================
-let forecastChart = null;
 
 document.querySelectorAll('input[name=forecastBasis]').forEach(r => r.addEventListener('change', () => {
   const mode = document.querySelector('input[name=forecastBasis]:checked').value;
@@ -1213,6 +1314,72 @@ function renderForecastMonthCheckboxes() {
   $('forecastMonthCheckboxes').innerHTML = months.map(m =>
     `<div class="form-check"><input class="form-check-input forecast-month-cb" type="checkbox" value="${esc(m.yearMonth)}" id="fcm-${esc(m.yearMonth)}"><label class="form-check-label" for="fcm-${esc(m.yearMonth)}">${esc(m.yearMonth)}</label></div>`
   ).join('');
+}
+
+function renderSvgLineChart(container, labels, datasets, yLabel) {
+  const W = 600, H = 300, PAD = { top: 20, right: 20, bottom: 40, left: 50 };
+  const pw = W - PAD.left - PAD.right, ph = H - PAD.top - PAD.bottom;
+  if (!labels.length) { container.innerHTML = ''; return; }
+  let yMin = Infinity, yMax = -Infinity;
+  datasets.forEach(ds => ds.data.forEach(v => { if (v < yMin) yMin = v; if (v > yMax) yMax = v; }));
+  if (yMin === yMax) { yMin -= 1; yMax += 1; }
+  const yRange = yMax - yMin;
+  const x = i => PAD.left + (labels.length > 1 ? i / (labels.length - 1) * pw : pw / 2);
+  const y = v => PAD.top + ph - (v - yMin) / yRange * ph;
+  const colors = ['#0d6efd','#dc3545','#198754','#ffc107','#6f42c1','#20c997','#fd7e14'];
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;font-family:sans-serif;font-size:11px;">`;
+  // Y axis grid + labels
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const val = yMin + yRange * i / yTicks;
+    const yy = y(val);
+    svg += `<line x1="${PAD.left}" y1="${yy}" x2="${W-PAD.right}" y2="${yy}" stroke="#e5e7eb" stroke-width="1"/>`;
+    svg += `<text x="${PAD.left-5}" y="${yy+4}" text-anchor="end" fill="#666">${val.toFixed(1)}</text>`;
+  }
+  // Y axis label
+  svg += `<text x="14" y="${PAD.top + ph/2}" text-anchor="middle" transform="rotate(-90,14,${PAD.top + ph/2})" fill="#666">${esc(yLabel)}</text>`;
+  // X axis labels (show subset)
+  const step = Math.max(1, Math.floor(labels.length / 8));
+  labels.forEach((lb, i) => {
+    if (i % step === 0 || i === labels.length - 1) {
+      svg += `<text x="${x(i)}" y="${H-5}" text-anchor="middle" fill="#666">${esc(lb)}</text>`;
+    }
+  });
+  // Lines
+  datasets.forEach((ds, di) => {
+    const c = colors[di % colors.length];
+    const pts = ds.data.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+    svg += `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2"/>`;
+  });
+  // Legend
+  let lx = PAD.left;
+  datasets.forEach((ds, di) => {
+    const c = colors[di % colors.length];
+    svg += `<rect x="${lx}" y="2" width="12" height="12" fill="${c}" rx="2"/>`;
+    svg += `<text x="${lx+15}" y="12" fill="#333">${esc(ds.label)}</text>`;
+    lx += 15 + ds.label.length * 8 + 10;
+  });
+  svg += '</svg>';
+  container.innerHTML = svg;
+}
+
+function renderSvgBarChart(container, items) {
+  if (!items.length) { container.innerHTML = ''; return; }
+  const W = 500, barH = 30, gap = 8, PAD = { top: 10, left: 100, right: 60, bottom: 10 };
+  const H = PAD.top + items.length * (barH + gap) + PAD.bottom;
+  const maxVal = Math.max(...items.map(d => d.value), 1);
+  const bw = W - PAD.left - PAD.right;
+  const colors = ['#0d6efd','#dc3545','#198754','#ffc107','#6f42c1','#20c997'];
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;font-family:sans-serif;font-size:12px;">`;
+  items.forEach((d, i) => {
+    const yy = PAD.top + i * (barH + gap);
+    const w = d.value / maxVal * bw;
+    svg += `<text x="${PAD.left-5}" y="${yy + barH/2 + 4}" text-anchor="end" fill="#333">${esc(d.label)}</text>`;
+    svg += `<rect x="${PAD.left}" y="${yy}" width="${w}" height="${barH}" fill="${colors[i%colors.length]}" rx="3"/>`;
+    svg += `<text x="${PAD.left + w + 5}" y="${yy + barH/2 + 4}" fill="#666">${fmtCny(d.value)}</text>`;
+  });
+  svg += '</svg>';
+  container.innerHTML = svg;
 }
 
 $('forecastRunBtn').addEventListener('click', () => withLoading($('forecastRunBtn'), async () => {
@@ -1229,6 +1396,29 @@ $('forecastRunBtn').addEventListener('click', () => withLoading($('forecastRunBt
   try {
     const res = await api('POST', '/api/forecast', body);
     $('forecastPayoffMonth').textContent = res.payoffMonth || '未预测出';
+
+    // Per-loan forecast table and chart
+    const lfs = res.loanForecasts || [];
+    if (lfs.length) {
+      let lhtml = '<h6>各贷款还清预测</h6><table class="table table-sm table-striped"><thead><tr><th>贷款</th><th>剩余本金</th><th>还清月数</th><th>预计还清</th><th>总未来利息</th></tr></thead><tbody>';
+      lfs.forEach(lf => {
+        const noData = lf.noData;
+        lhtml += `<tr${noData?' class="table-warning"':''}><td>${esc(lf.loanName)}</td><td class="ratio-cell">${fmtCny(lf.remainingPrincipal)}</td>`;
+        if (noData) {
+          lhtml += `<td colspan="3" class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>历史数据中无该贷款还款记录，无法预测</td>`;
+        } else {
+          lhtml += `<td>${lf.monthsToPayoff||'-'}</td><td>${lf.payoffMonth||'-'}</td>`;
+          lhtml += `<td class="ratio-cell" data-testid="forecast-loan-interest-${esc(lf.loanId)}">${fmtCny(lf.totalFutureInterest)}</td>`;
+        }
+        lhtml += '</tr>';
+      });
+      lhtml += '</tbody></table>';
+      $('forecastLoanInterest').innerHTML = lhtml;
+    } else {
+      $('forecastLoanInterest').innerHTML = '';
+    }
+
+    // Final ratios
     const payers = STATE.payers || [];
     const series = res.series || {};
     const labels = res.months || [];
@@ -1238,23 +1428,16 @@ $('forecastRunBtn').addEventListener('click', () => withLoading($('forecastRunBt
       return `<div>${esc(p.name)}：<span class="ratio-cell" data-testid="forecast-final-ratio-${esc(p.id)}">${finalR!=null?fmtPct(finalR):'-'}</span></div>`;
     }).join('');
 
-    if (typeof Chart === 'undefined') {
-      $('forecastChart').style.display = 'none';
-      showToast('图表库未加载，数值结果仍然有效。请检查网络后刷新页面。', 'info');
-    } else {
-      $('forecastChart').style.display = '';
-      if (forecastChart) forecastChart.destroy();
-      const ctx = $('forecastChart').getContext('2d');
-      const colors = ['#0d6efd','#dc3545','#198754','#ffc107','#6f42c1','#20c997','#fd7e14'];
-      const datasets = payers.map((p, idx) => ({
-        label: p.name,
-        data: (series[p.id]||[]).map(v => v*100),
-        borderColor: colors[idx%colors.length], fill:false, tension:0.2
-      }));
-      forecastChart = new Chart(ctx, {
-        type:'line', data:{ labels, datasets },
-        options:{ responsive:true, scales:{ y:{ title:{display:true,text:'权益比例 %'} } } }
-      });
+    // SVG charts: equity trend + loan interest bar
+    const chartWrap = $('forecastChartWrap');
+    chartWrap.innerHTML = '<div id="forecastEquityChart"></div><div id="forecastInterestChart" style="margin-top:16px;"></div>';
+    if (labels.length && payers.length) {
+      const datasets = payers.map(p => ({ label: p.name, data: (series[p.id]||[]).map(v => v*100) }));
+      renderSvgLineChart($('forecastEquityChart'), labels, datasets, '权益比例 %');
+    }
+    const barItems = lfs.filter(lf => lf.totalFutureInterest > 0).map(lf => ({ label: lf.loanName, value: lf.totalFutureInterest }));
+    if (barItems.length) {
+      renderSvgBarChart($('forecastInterestChart'), barItems);
     }
   } catch(e) { showToast('预测失败：'+e.message, 'error'); }
 }));

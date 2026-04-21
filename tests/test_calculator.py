@@ -206,12 +206,16 @@ def test_scenario_e_manual_mode_updates_cp():
     calculator.recompute_all(s)
     m1 = s["months"][0]["computed"]["perPayer"]
     m2 = s["months"][1]["computed"]["perPayer"]
-    # Manual month: principal=0 so CP unchanged vs previous
-    assert m2["p1"]["cumulativePrincipal"] == pytest.approx(m1["p1"]["cumulativePrincipal"], abs=1e-6)
-    assert m2["p2"]["cumulativePrincipal"] == pytest.approx(m1["p2"]["cumulativePrincipal"], abs=1e-6)
+    # Manual month: actual_principal = (4000+2000)-3000 = 3000, adj = 0.5*3000 = 1500
+    assert m2["p1"]["cumulativePrincipal"] == pytest.approx(
+        m1["p1"]["cumulativePrincipal"] + 1500.0, abs=1e-2
+    )
+    assert m2["p2"]["cumulativePrincipal"] == pytest.approx(
+        m1["p2"]["cumulativePrincipal"] + 1500.0, abs=1e-2
+    )
     assert m2["p1"]["ratio"] == pytest.approx(0.5, abs=1e-4)
     assert m2["p2"]["ratio"] == pytest.approx(0.5, abs=1e-4)
-    # Add a third auto month; basis should be CP ratio (~55.34/44.66), not manual 50/50
+    # Add a third auto month; basis should be CP ratio, not manual 50/50
     s["months"].append(
         {
             "yearMonth": "2024-03",
@@ -226,9 +230,9 @@ def test_scenario_e_manual_mode_updates_cp():
     )
     calculator.recompute_all(s)
     m3 = s["months"][2]["computed"]["perPayer"]
-    # interest shares based on CP ratio, not manual 50/50
-    assert m3["p1"]["interestShare"] == pytest.approx(1660.34, abs=0.01)
-    assert m3["p2"]["interestShare"] == pytest.approx(1339.66, abs=0.01)
+    # interest shares based on CP ratio (~113850/206000=55.27%), not manual 50/50
+    assert m3["p1"]["interestShare"] == pytest.approx(1658.01, abs=0.01)
+    assert m3["p2"]["interestShare"] == pytest.approx(1341.99, abs=0.01)
 
 
 # --------- Cascading recompute when editing history ------------------------

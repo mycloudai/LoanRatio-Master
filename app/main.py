@@ -485,15 +485,21 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
             s = _ensure_state()
             months = s.get("months", [])
             last_per = months[-1].get("computed", {}).get("perPayer", {}) if months else {}
+            # Compute CP-based ratios (not stored ratio, which may be manual override)
+            total_cp = sum(
+                last_per.get(p["id"], {}).get("cumulativePrincipal", 0.0)
+                for p in s.get("payers", [])
+            )
             payers_out = []
             for p in s.get("payers", []):
                 info = last_per.get(p["id"], {})
+                cp = info.get("cumulativePrincipal", 0.0)
                 payers_out.append(
                     {
                         "id": p["id"],
                         "name": p.get("name", ""),
-                        "cumulativePrincipal": info.get("cumulativePrincipal", 0.0),
-                        "currentRatio": info.get("ratio", 0.0),
+                        "cumulativePrincipal": cp,
+                        "currentRatio": cp / total_cp if total_cp > 0 else 0.0,
                     }
                 )
             loans_out = [
@@ -547,7 +553,35 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
                     # Generate human-readable calculation steps
                     steps: list[str] = []
                     mode = m.get("mode", "auto")
-                    if mode == "auto":
+                    manual_ratios = m.get("manualRatios") or {}
+                    if mode == "manual":
+                        total_payments = sum(
+                            pay_map.get(pid, 0.0) for pid in per
+                        )
+                        actual_principal = max(0.0, total_payments - total_interest)
+                        steps.append("本月为手动比例月份")
+                        steps.append("")
+                        steps.append("各参还人还款额：")
+                        for pid in per:
+                            name = payer_names.get(pid, pid)
+                            pay = pay_map.get(pid, 0)
+                            steps.append(f"  {name}: {pay}")
+                        steps.append(f"  还款总额 = {total_payments}")
+                        steps.append("")
+                        steps.append(
+                            f"实际本金 = max(0, 还款总额 − 总利息) = max(0, {total_payments} − {total_interest}) = {actual_principal}"
+                        )
+                        steps.append("")
+                        steps.append("按手动比例计入累计本金：")
+                        for pid in per:
+                            name = payer_names.get(pid, pid)
+                            mr = manual_ratios.get(pid, 0.0)
+                            adj = per[pid].get("adjPrincipal", 0)
+                            cp = per[pid].get("cumulativePrincipal", 0)
+                            steps.append(
+                                f"  {name}: 手动比例 = {mr:.4f}，本月计入本金 = {mr:.4f} × {actual_principal} = {adj}，累计 = {cp}"
+                            )
+                    elif mode == "auto":
                         steps.append(f"本月总利息 = {total_interest}")
                         steps.append("")
                         steps.append("Step 1 — 利息分摊 (按上月比例)：")
@@ -695,7 +729,7 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
             s = _ensure_state()
             months = s.get("months", [])
             if not months:
-                return jsonify({"projection": [], "payoffMonth": None})
+                return _err("at least one month of data is required for forecast")
             if selected_months:
                 sel_set = set(selected_months)
                 recent = [m for m in months if m["yearMonth"] in sel_set]
@@ -705,28 +739,44 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
                 recent = months[-window:] if window > 0 else months
             # Average payments per payer and per loan
             payer_ids = [p["id"] for p in s.get("payers", [])]
-            loan_ids = [ln["id"] for ln in s.get("loans", [])]
+            loans_list = s.get("loans", [])
+            loan_ids = [ln["id"] for ln in loans_list]
+            loan_names = {ln["id"]: ln.get("name", ln["id"]) for ln in loans_list}
+
+            # Exclude downpayment month (0000-00) from averaging
+            avg_months = [m for m in recent if m.get("yearMonth") != "0000-00"]
+            if not avg_months:
+                return _err("no non-downpayment months available for forecast")
+
             sums = {pid: 0.0 for pid in payer_ids}
             loan_interest_sums: dict[str, float] = {lid: 0.0 for lid in loan_ids}
             loan_principal_sums: dict[str, float] = {lid: 0.0 for lid in loan_ids}
-            interest_sums = 0.0
-            principal_sums = 0.0
-            for m in recent:
-                for pp in m.get("payerPayments") or []:
-                    if pp["payerId"] in sums:
-                        sums[pp["payerId"]] += float(pp.get("amount", 0.0))
+            for m in avg_months:
+                mode = m.get("mode", "auto")
+                manual_ratios = m.get("manualRatios") or {}
+                if mode == "manual" and manual_ratios:
+                    # Manual months: attribute payments by manual ratios,
+                    # not raw payerPayments, so the forecast respects the
+                    # user's intended equity split.
+                    total_pay = sum(
+                        float(pp.get("amount", 0.0))
+                        for pp in (m.get("payerPayments") or [])
+                    )
+                    for pid in payer_ids:
+                        sums[pid] += float(manual_ratios.get(pid, 0.0)) * total_pay
+                else:
+                    for pp in m.get("payerPayments") or []:
+                        if pp["payerId"] in sums:
+                            sums[pp["payerId"]] += float(pp.get("amount", 0.0))
                 for ld in m.get("loanDetails") or []:
                     lid = ld.get("loanId")
                     interest = float(ld.get("interest", 0.0))
                     principal = float(ld.get("principal", 0.0))
-                    interest_sums += interest
-                    principal_sums += principal
                     if lid in loan_interest_sums:
                         loan_interest_sums[lid] += interest
                         loan_principal_sums[lid] += principal
-            n = max(1, len(recent))
+            n = max(1, len(avg_months))
             avg_payments = {pid: sums[pid] / n for pid in payer_ids}
-            avg_principal = principal_sums / n
             avg_loan_interest = {lid: loan_interest_sums[lid] / n for lid in loan_ids}
             avg_loan_principal = {lid: loan_principal_sums[lid] / n for lid in loan_ids}
 
@@ -734,13 +784,15 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
             projection = []
             sim_state = {
                 "payers": s.get("payers", []),
-                "loans": [dict(ln) for ln in s.get("loans", [])],
+                "loans": [dict(ln) for ln in loans_list],
                 "downpayment": s.get("downpayment"),
                 "months": [
                     {k: v for k, v in m.items() if not k.startswith("_")} for m in months
                 ],
             }
             last_ym = months[-1]["yearMonth"]
+            if last_ym == "0000-00":
+                return _err("at least one regular month is required for forecast")
             y, mm = map(int, last_ym.split("-"))
             for _ in range(horizon):
                 mm += 1
@@ -773,18 +825,87 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
                     }
                 )
 
-            # Payoff month estimate
-            payoff = None
-            if avg_principal > 0 and s.get("loans"):
-                remaining = sum(float(ln.get("remainingPrincipal", 0.0)) for ln in s["loans"])
-                if remaining > 0:
-                    months_left = int(remaining / avg_principal) + 1
+            # Per-loan forecast: total interest until payoff
+            loan_forecasts = []
+            for lid in loan_ids:
+                avg_int = avg_loan_interest[lid]
+                avg_prin = avg_loan_principal[lid]
+                rem = float(
+                    next(
+                        (ln.get("remainingPrincipal", 0) for ln in s["loans"] if ln["id"] == lid),
+                        0,
+                    )
+                )
+                if rem <= 0:
+                    loan_forecasts.append({
+                        "loanId": lid,
+                        "loanName": loan_names.get(lid, lid),
+                        "remainingPrincipal": 0.0,
+                        "monthsToPayoff": 0,
+                        "payoffMonth": None,
+                        "totalFutureInterest": 0.0,
+                        "noData": False,
+                    })
+                elif avg_prin <= 0:
+                    # Loan has remaining principal but no average principal repayment
+                    # — historical data missing or interest-only period
+                    loan_forecasts.append({
+                        "loanId": lid,
+                        "loanName": loan_names.get(lid, lid),
+                        "remainingPrincipal": round(rem, 2),
+                        "monthsToPayoff": None,
+                        "payoffMonth": None,
+                        "totalFutureInterest": None,
+                        "noData": True,
+                    })
+                else:
+                    months_left = 0
+                    total_interest = 0.0
+                    r = rem
+                    while r > 0 and months_left < 1200:
+                        total_interest += avg_int
+                        r -= avg_prin
+                        months_left += 1
                     yy, mmx = map(int, last_ym.split("-"))
                     mmx += months_left
                     yy += (mmx - 1) // 12
                     mmx = ((mmx - 1) % 12) + 1
-                    payoff = f"{yy:04d}-{mmx:02d}"
-            return jsonify({"projection": projection, "payoffMonth": payoff})
+                    loan_forecasts.append({
+                        "loanId": lid,
+                        "loanName": loan_names.get(lid, lid),
+                        "remainingPrincipal": round(rem, 2),
+                        "monthsToPayoff": months_left,
+                        "payoffMonth": f"{yy:04d}-{mmx:02d}",
+                        "totalFutureInterest": round(total_interest, 2),
+                        "noData": False,
+                    })
+
+            # Overall payoff = latest per-loan payoff; None if any loan can't pay off
+            has_unpayable = any(
+                lf["noData"] for lf in loan_forecasts
+            )
+            payoff = None
+            if not has_unpayable:
+                for lf in loan_forecasts:
+                    if lf["payoffMonth"]:
+                        if payoff is None or lf["payoffMonth"] > payoff:
+                            payoff = lf["payoffMonth"]
+
+            # Build series/months for chart consumption
+            series: dict[str, list[float]] = {pid: [] for pid in payer_ids}
+            proj_months: list[str] = []
+            for p in projection:
+                proj_months.append(p["yearMonth"])
+                for pid in payer_ids:
+                    series[pid].append(p["ratios"].get(pid, 0.0))
+
+            return jsonify({
+                "projection": projection,
+                "payoffMonth": payoff,
+                "loanForecasts": loan_forecasts,
+                "series": series,
+                "months": proj_months,
+            })
 
     # ---------------- Export ----------------------------------------------
     @app.get("/api/export/excel")

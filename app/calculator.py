@@ -6,7 +6,8 @@ Implements the four-step monthly model described in PLAN.md:
   3. Negative principals get redistributed to S+ payers weighted by r_i(t-1)
   4. CP_i(t) = CP_i(t-1) + adj_i(t);  r_i(t) = CP_i(t) / CP(t)
 
-Manual mode: r_i(t) = manualRatios[i] directly. CP updated by manual ratio * total principal.
+Manual mode: r_i(t) = manualRatios[i] directly.
+   Actual principal = max(0, sum(payments) - interest); CP updated by manual ratio * actual principal.
    Interest share computed by manual ratio for display.
    Next month's r_i(t-1) reverts to CP_i(t) / CP(t), not manual ratios.
 
@@ -113,10 +114,10 @@ def _compute_auto_month(
         # weighted by their previous-month ratio.
         denom = sum(prev_ratio.get(pid, 0.0) for pid in s_plus)
         if denom <= 0:
-            # Fallback: equal split among S+ (e.g., new payers with prev_ratio=0)
-            share = neg_total / len(s_plus)
+            # All S+ payers have prev_ratio=0 — they have no existing weight
+            # to absorb deficits.  Keep their own raw contribution only.
             for pid in s_plus:
-                adj[pid] = raw[pid] + share
+                adj[pid] = raw[pid]
         else:
             for pid in s_plus:
                 adj[pid] = raw[pid] + (prev_ratio.get(pid, 0.0) / denom) * neg_total
@@ -162,16 +163,18 @@ def _compute_manual_month(
     prev_cp: dict[str, float],
     payments: dict[str, float],
     total_interest: float,
-    total_principal: float,
     manual_ratios: dict[str, float],
 ) -> dict[str, dict[str, float]]:
+    # Actual principal = total payments - interest (consistent with auto mode)
+    total_payments = sum(payments.get(pid, 0.0) for pid in active_ids)
+    actual_principal = max(0.0, total_payments - total_interest)
     per: dict[str, dict[str, float]] = {}
     for pid in payer_ids_all:
         is_active = pid in active_ids
         mr = float(manual_ratios.get(pid, 0.0))
         i_share = mr * total_interest if is_active else 0.0
         pay = payments.get(pid, 0.0) if is_active else 0.0
-        adj = mr * total_principal if is_active else 0.0
+        adj = mr * actual_principal if is_active else 0.0
         per[pid] = {
             "interestShare": i_share,
             "rawPrincipal": (pay - i_share) if is_active else 0.0,
@@ -227,7 +230,6 @@ def recompute_all(state: dict[str, Any]) -> dict[str, Any]:
 
         if mode == "manual":
             manual_ratios = m.get("manualRatios") or {}
-            total_principal = sum(float(ld.get("principal", 0.0)) for ld in loan_details)
             per = _compute_manual_month(
                 payer_ids_all=payer_ids_all,
                 active_ids=active_ids,
@@ -235,7 +237,6 @@ def recompute_all(state: dict[str, Any]) -> dict[str, Any]:
                 prev_cp=cp_state,
                 payments=payments,
                 total_interest=total_interest,
-                total_principal=total_principal,
                 manual_ratios=manual_ratios,
             )
             cp_state = {pid: per[pid]["cumulativePrincipal"] for pid in payer_ids_all}

@@ -1,6 +1,6 @@
 [project]
 name = "loanratio"
-version = "0.3.0"
+version = "0.6.1"
 description = "共同还贷所有权计算器 - Local Flask app for tracking loan repayment ownership ratios"
 readme = "README.md"
 requires-python = ">=3.11"
