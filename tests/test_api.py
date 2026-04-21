@@ -252,8 +252,104 @@ def test_month_detail_endpoint(client):
     r = client.get("/api/months/2024-01/detail")
     assert r.status_code == 200
     body = r.get_json()
-    assert "computed" in body
+    assert "perPayer" in body
+    assert "totalInterest" in body
+    assert "steps" in body
+    assert "redistribution" in body
     assert "formulas" in body
+    assert body["perPayer"]["p1"]["payment"] == 20.0
+
+
+def test_month_detail_negative_redistribution(client):
+    """Detail endpoint shows redistribution steps when a payer has negative raw principal."""
+    client.post("/api/payers", json={"name": "Alice"})
+    client.post("/api/payers", json={"name": "Bob"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 100000})
+    # Month 1: establish ratios
+    client.post(
+        "/api/months",
+        json={
+            "yearMonth": "2025-01",
+            "mode": "auto",
+            "loanDetails": [{"loanId": "l1", "interest": 1000, "principal": 2000}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 2000},
+                {"payerId": "p2", "amount": 1000},
+            ],
+        },
+    )
+    # Month 2: Bob pays less than interest share -> negative raw principal
+    client.post(
+        "/api/months",
+        json={
+            "yearMonth": "2025-02",
+            "mode": "auto",
+            "loanDetails": [{"loanId": "l1", "interest": 2000, "principal": 1000}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 2800},
+                {"payerId": "p2", "amount": 200},
+            ],
+        },
+    )
+    r = client.get("/api/months/2025-02/detail")
+    assert r.status_code == 200
+    body = r.get_json()
+    # Bob's raw principal should be negative, adj should be 0
+    bob = body["perPayer"]["p2"]
+    assert bob["rawPrincipal"] < 0
+    assert bob["adjPrincipal"] == 0.0
+    # Redistribution should be non-empty and mention Bob
+    assert len(body["redistribution"]) > 0
+    assert any("Bob" in s for s in body["redistribution"])
+    # Steps should mention negative redistribution
+    assert any("负本金" in s for s in body["steps"])
+    # Alice should have adj > raw (absorbed the deficit)
+    alice = body["perPayer"]["p1"]
+    assert alice["adjPrincipal"] > alice["rawPrincipal"]
+
+
+def test_month_detail_all_negative_redistribution(client):
+    """When all payers have negative raw principal, redistribution explains all zeroed out."""
+    client.post("/api/payers", json={"name": "Alice"})
+    client.post("/api/payers", json={"name": "Bob"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 100000})
+    # Month 1: seed ratios
+    client.post(
+        "/api/months",
+        json={
+            "yearMonth": "2025-01",
+            "mode": "auto",
+            "loanDetails": [{"loanId": "l1", "interest": 500, "principal": 1000}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 1000},
+                {"payerId": "p2", "amount": 500},
+            ],
+        },
+    )
+    # Month 2: both pay less than their interest share
+    client.post(
+        "/api/months",
+        json={
+            "yearMonth": "2025-02",
+            "mode": "auto",
+            "loanDetails": [{"loanId": "l1", "interest": 5000, "principal": 100}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 100},
+                {"payerId": "p2", "amount": 50},
+            ],
+        },
+    )
+    r = client.get("/api/months/2025-02/detail")
+    assert r.status_code == 200
+    body = r.get_json()
+    # Both should have negative raw and zero adj
+    assert body["perPayer"]["p1"]["rawPrincipal"] < 0
+    assert body["perPayer"]["p2"]["rawPrincipal"] < 0
+    assert body["perPayer"]["p1"]["adjPrincipal"] == 0.0
+    assert body["perPayer"]["p2"]["adjPrincipal"] == 0.0
+    # Redistribution should explain all zeroed out, not mention "正本金参还人"
+    assert any("全部归零" in s for s in body["redistribution"])
+    assert not any("正本金参还人" in s for s in body["redistribution"])
 
 
 def test_patch_month_recomputes(client):
@@ -313,6 +409,250 @@ def test_forecast_endpoint(client):
     assert r.status_code == 200
     body = r.get_json()
     assert len(body["projection"]) == 3
+
+
+def test_forecast_selected_months(client):
+    client.post("/api/payers", json={"name": "A"})
+    client.post("/api/payers", json={"name": "B"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000})
+    for ym, a1, a2 in [("2024-01", 200, 100), ("2024-02", 500, 300), ("2024-03", 200, 100)]:
+        client.post(
+            "/api/months",
+            json={
+                "yearMonth": ym,
+                "mode": "auto",
+                "loanDetails": [{"loanId": "l1", "interest": 50, "principal": 50}],
+                "payerPayments": [
+                    {"payerId": "p1", "amount": a1},
+                    {"payerId": "p2", "amount": a2},
+                ],
+            },
+        )
+    # Use only month 2024-02 (higher payments) as basis
+    r = client.post(
+        "/api/forecast",
+        json={"selectedMonths": ["2024-02"], "horizonMonths": 3},
+    )
+    assert r.status_code == 200
+    body = r.get_json()
+    assert len(body["projection"]) == 3
+    # All history (lower average) should give different ratios
+    r2 = client.post(
+        "/api/forecast", json={"windowMonths": 0, "horizonMonths": 3}
+    )
+    body2 = r2.get_json()
+    # The selected-month forecast should differ from all-history forecast
+    assert body["projection"] != body2["projection"]
+
+    # Invalid selectedMonths returns error
+    r3 = client.post(
+        "/api/forecast",
+        json={"selectedMonths": ["9999-01"], "horizonMonths": 3},
+    )
+    assert r3.status_code == 400
+
+
+def test_forecast_selected_months_multiple(client):
+    """Selecting multiple months averages their payment patterns."""
+    client.post("/api/payers", json={"name": "A"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000})
+    for ym, amt in [("2024-01", 100), ("2024-02", 200), ("2024-03", 300)]:
+        client.post(
+            "/api/months",
+            json={
+                "yearMonth": ym,
+                "mode": "auto",
+                "loanDetails": [{"loanId": "l1", "interest": 20, "principal": 30}],
+                "payerPayments": [{"payerId": "p1", "amount": amt}],
+            },
+        )
+    # Select months 1 and 3 (avg payment = 200)
+    r = client.post(
+        "/api/forecast",
+        json={"selectedMonths": ["2024-01", "2024-03"], "horizonMonths": 2},
+    )
+    assert r.status_code == 200
+    assert len(r.get_json()["projection"]) == 2
+
+    # Select only month 2 (payment = 200) — same average, should give same result
+    r2 = client.post(
+        "/api/forecast",
+        json={"selectedMonths": ["2024-02"], "horizonMonths": 2},
+    )
+    assert r2.status_code == 200
+    proj1 = r.get_json()["projection"]
+    proj2 = r2.get_json()["projection"]
+    # Ratios should be identical since average payment is the same
+    for a, b in zip(proj1, proj2):
+        assert a["ratios"]["p1"] == pytest.approx(b["ratios"]["p1"], abs=1e-4)
+
+
+def test_forecast_selected_months_bad_type(client):
+    """selectedMonths must be an array."""
+    client.post("/api/payers", json={"name": "A"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100})
+    client.post(
+        "/api/months",
+        json={
+            "yearMonth": "2024-01",
+            "mode": "auto",
+            "loanDetails": [{"loanId": "l1", "interest": 5, "principal": 5}],
+            "payerPayments": [{"payerId": "p1", "amount": 10}],
+        },
+    )
+    r = client.post("/api/forecast", json={"selectedMonths": "2024-01", "horizonMonths": 3})
+    assert r.status_code == 400
+
+
+def test_forecast_selected_months_empty_array(client):
+    """selectedMonths=[] should return 400, not silently fall back to window."""
+    client.post("/api/payers", json={"name": "A"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 100, "remainingPrincipal": 100})
+    client.post(
+        "/api/months",
+        json={
+            "yearMonth": "2024-01",
+            "mode": "auto",
+            "loanDetails": [{"loanId": "l1", "interest": 5, "principal": 5}],
+            "payerPayments": [{"payerId": "p1", "amount": 10}],
+        },
+    )
+    r = client.post("/api/forecast", json={"selectedMonths": [], "horizonMonths": 3})
+    assert r.status_code == 400
+
+
+def test_forecast_all_history_window_zero(client):
+    """windowMonths=0 uses all historical months."""
+    client.post("/api/payers", json={"name": "A"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 5000, "remainingPrincipal": 5000})
+    for ym in ["2024-01", "2024-02", "2024-03"]:
+        client.post(
+            "/api/months",
+            json={
+                "yearMonth": ym,
+                "mode": "auto",
+                "loanDetails": [{"loanId": "l1", "interest": 10, "principal": 50}],
+                "payerPayments": [{"payerId": "p1", "amount": 60}],
+            },
+        )
+    r = client.post("/api/forecast", json={"windowMonths": 0, "horizonMonths": 6})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert len(body["projection"]) == 6
+    assert body["payoffMonth"] is not None
+
+
+def test_loan_remaining_defaults_to_original(client):
+    """When remainingPrincipal is omitted, it defaults to originalAmount."""
+    r = client.post("/api/loans", json={"name": "房贷", "originalAmount": 500000})
+    assert r.status_code == 201
+    loan = r.get_json()
+    assert loan["remainingPrincipal"] == pytest.approx(500000.0)
+
+    # Verify the state also reflects the default
+    s = client.get("/api/state").get_json()
+    ln = next(l for l in s["loans"] if l["id"] == loan["id"])
+    assert ln["remainingPrincipal"] == pytest.approx(500000.0)
+
+
+def test_loan_remaining_explicit_overrides_default(client):
+    """Explicit remainingPrincipal is respected."""
+    r = client.post(
+        "/api/loans",
+        json={"name": "二手房贷", "originalAmount": 800000, "remainingPrincipal": 600000},
+    )
+    assert r.status_code == 201
+    assert r.get_json()["remainingPrincipal"] == pytest.approx(600000.0)
+
+
+def test_manual_mode_with_loan_details_and_payments(client):
+    """Manual mode accepts loanDetails and payerPayments alongside manualRatios."""
+    client.post("/api/payers", json={"name": "A"})
+    client.post("/api/payers", json={"name": "B"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 100000, "remainingPrincipal": 100000})
+    r = client.post(
+        "/api/months",
+        json={
+            "yearMonth": "2024-01",
+            "mode": "manual",
+            "loanDetails": [{"loanId": "l1", "interest": 500, "principal": 1000}],
+            "payerPayments": [
+                {"payerId": "p1", "amount": 1000},
+                {"payerId": "p2", "amount": 500},
+            ],
+            "manualRatios": {"p1": 0.6, "p2": 0.4},
+        },
+    )
+    assert r.status_code == 201
+    body = r.get_json()
+    computed = body["computed"]["perPayer"]
+    # Ratios are from manualRatios
+    assert computed["p1"]["ratio"] == pytest.approx(0.6, abs=1e-4)
+    assert computed["p2"]["ratio"] == pytest.approx(0.4, abs=1e-4)
+    # Interest share is computed for display
+    assert computed["p1"]["interestShare"] >= 0
+    assert computed["p2"]["interestShare"] >= 0
+    # Loan remaining principal updated by loanDetails
+    s = client.get("/api/state").get_json()
+    ln = next(l for l in s["loans"] if l["id"] == "l1")
+    assert ln["remainingPrincipal"] == pytest.approx(99000.0, abs=1e-2)
+
+
+def test_summary_snapshot_data_at_specific_month(client):
+    """State contains enough computed data to reconstruct any historical time-point."""
+    client.post("/api/payers", json={"name": "A"})
+    client.post("/api/payers", json={"name": "B"})
+    client.post("/api/loans", json={"name": "L", "originalAmount": 10000, "remainingPrincipal": 10000})
+    # Create 3 months with varying payments
+    for ym, a1, a2, prin in [
+        ("2024-01", 300, 200, 100),
+        ("2024-02", 400, 100, 100),
+        ("2024-03", 200, 300, 100),
+    ]:
+        client.post(
+            "/api/months",
+            json={
+                "yearMonth": ym,
+                "mode": "auto",
+                "loanDetails": [{"loanId": "l1", "interest": 50, "principal": prin}],
+                "payerPayments": [
+                    {"payerId": "p1", "amount": a1},
+                    {"payerId": "p2", "amount": a2},
+                ],
+            },
+        )
+    s = client.get("/api/state").get_json()
+    months = s["months"]
+    assert len(months) == 3
+    # Each month has computed data that serves as a snapshot
+    for i, m in enumerate(months):
+        assert "computed" in m
+        per = m["computed"]["perPayer"]
+        assert "p1" in per and "p2" in per
+        assert "ratio" in per["p1"]
+        assert "cumulativePrincipal" in per["p1"]
+        # Ratios must sum to 1
+        total_ratio = per["p1"]["ratio"] + per["p2"]["ratio"]
+        assert total_ratio == pytest.approx(1.0, abs=1e-3)
+
+    # Month 1 snapshot: p1 paid more, should have higher ratio
+    m1 = months[0]["computed"]["perPayer"]
+    assert m1["p1"]["ratio"] > m1["p2"]["ratio"]
+    # Month 2 snapshot: p1 paid even more, ratio should increase further
+    m2 = months[1]["computed"]["perPayer"]
+    assert m2["p1"]["ratio"] > m1["p1"]["ratio"]
+    # Month 3 snapshot: p2 paid more, p1 ratio should decrease
+    m3 = months[2]["computed"]["perPayer"]
+    assert m3["p1"]["ratio"] < m2["p1"]["ratio"]
+
+    # Loan remaining at each snapshot can be computed from cumulative principal
+    total_principal_paid = sum(
+        ld["principal"]
+        for m in months
+        for ld in m.get("loanDetails", [])
+    )
+    final_remaining = s["loans"][0]["remainingPrincipal"]
+    assert final_remaining == pytest.approx(10000 - total_principal_paid, abs=1e-2)
 
 
 def test_storage_roundtrip(tmp_path):

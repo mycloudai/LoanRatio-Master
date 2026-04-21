@@ -778,10 +778,10 @@ reset_state
 curl -sf -X POST $URL/api/payers -H content-type:application/json -d '{"name":"A"}' >/dev/null
 # Create loan without remainingPrincipal field
 LOAN=$(curl -sf -X POST $URL/api/loans -H content-type:application/json -d '{"name":"测试贷款","originalAmount":800000}')
-assert_eq "默认 rp = original" "$(echo "$LOAN" | jq -r '.remainingPrincipal')" "800000"
+assert_eq "默认 rp = original" "$(echo "$LOAN" | jq -r '.remainingPrincipal')" "800000.0"
 # Create loan with explicit remainingPrincipal
 LOAN2=$(curl -sf -X POST $URL/api/loans -H content-type:application/json -d '{"name":"二手贷","originalAmount":500000,"remainingPrincipal":300000}')
-assert_eq "显式 rp 被保留" "$(echo "$LOAN2" | jq -r '.remainingPrincipal')" "300000"
+assert_eq "显式 rp 被保留" "$(echo "$LOAN2" | jq -r '.remainingPrincipal')" "300000.0"
 
 # =====================================================================
 # 38. 手动模式包含利息本金和还款字段

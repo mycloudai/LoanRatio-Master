@@ -135,6 +135,20 @@
   .formula-cell { cursor: pointer; color: var(--lr-primary); text-decoration: underline dotted; transition: background 0.15s; }
   .formula-cell:hover { background: #dbeafe; }
 
+  /* Responsive wide tables: sticky first column + collapsible detail columns */
+  .table-sticky-col { position: relative; }
+  .table-sticky-col th:first-child,
+  .table-sticky-col td:first-child {
+    position: sticky; left: 0; z-index: 2;
+    background: inherit;
+  }
+  .table-sticky-col thead th:first-child { z-index: 3; background: #f8fafc; }
+  .table-sticky-col tbody tr:nth-of-type(odd) td:first-child { background: #fafbfc; }
+  .table-sticky-col tbody tr:nth-of-type(even) td:first-child { background: #fff; }
+  .table-sticky-col tbody tr:hover td:first-child { background-color: var(--lr-primary-light) !important; }
+  .col-extra { display: none; }
+  .show-extra .col-extra { display: table-cell; }
+
   /* Toast */
   .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; }
   .toast { border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
@@ -289,7 +303,10 @@
     </div></div>
 
     <div class="card mb-3"><div class="card-body">
-      <h6>历史月份</h6>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0">历史月份</h6>
+        <button class="btn btn-sm btn-outline-secondary" id="monthsToggleExtra" title="展开/收起详细列"><i class="bi bi-arrows-expand"></i> 详细列</button>
+      </div>
       <div class="mb-2">
         <label class="me-2">跳转月份：</label>
         <select id="monthJumpSelect" class="form-select form-select-sm d-inline-block w-auto"></select>
@@ -320,7 +337,7 @@
       <a class="btn btn-success" id="exportExcelBtn" data-testid="export-excel-btn" href="/api/export/excel" target="_blank">导出 Excel</a>
     </div></div>
     <div class="card mb-3"><div class="card-body table-responsive">
-      <table class="table table-sm" id="summaryHistoryTable"></table>
+      <table class="table table-sm table-sticky-col" id="summaryHistoryTable"></table>
     </div></div>
   </div>
 
@@ -870,9 +887,10 @@ function renderMonthsList() {
 
   if (!months.length) { wrap.innerHTML = '<div class="empty-state"><i class="bi bi-calendar-x"></i>暂无月份记录</div>'; return; }
 
-  let html = '<div class="table-responsive"><table class="table table-sm table-striped align-middle"><thead><tr>' +
+  const showExtra = wrap.closest('.card-body')?.querySelector('table')?.classList.contains('show-extra') || false;
+  let html = '<div class="table-responsive"><table class="table table-sm table-striped align-middle table-sticky-col' + (showExtra ? ' show-extra' : '') + '"><thead><tr>' +
     '<th>月份</th><th>模式</th>' +
-    payers.map(p => `<th>${esc(p.name)} 净本金</th><th>${esc(p.name)} 累计</th><th>${esc(p.name)} 利息</th><th>${esc(p.name)} 比例</th>`).join('') +
+    payers.map(p => `<th>${esc(p.name)} 净本金</th><th class="col-extra">${esc(p.name)} 累计</th><th class="col-extra">${esc(p.name)} 利息</th><th>${esc(p.name)} 比例</th>`).join('') +
     '<th>操作</th></tr></thead><tbody>';
   months.forEach(m => {
     const c = m.computed || { perPayer: {} };
@@ -887,8 +905,8 @@ function renderMonthsList() {
       const ratio = pp.ratio!=null ? fmtPct(pp.ratio) : '-';
       html += `<td><span class="clickable ratio-cell" data-testid="month-adj-principal-${esc(m.yearMonth)}-${esc(p.id)}"
                  onclick="openDetail('${esc(m.yearMonth)}')">${adj}</span></td>
-               <td class="ratio-cell" data-testid="month-cumulative-${esc(m.yearMonth)}-${esc(p.id)}">${cum}</td>
-               <td class="ratio-cell" data-testid="month-interest-share-${esc(m.yearMonth)}-${esc(p.id)}">${iShare}</td>
+               <td class="ratio-cell col-extra" data-testid="month-cumulative-${esc(m.yearMonth)}-${esc(p.id)}">${cum}</td>
+               <td class="ratio-cell col-extra" data-testid="month-interest-share-${esc(m.yearMonth)}-${esc(p.id)}">${iShare}</td>
                <td class="ratio-cell" data-testid="month-ratio-${esc(m.yearMonth)}-${esc(p.id)}">${ratio}</td>`;
     });
     html += `<td>
@@ -899,6 +917,17 @@ function renderMonthsList() {
   html += '</tbody></table></div>';
   wrap.innerHTML = html;
 }
+
+$('monthsToggleExtra').addEventListener('click', () => {
+  const tbl = $('monthsList').querySelector('table');
+  if (!tbl) return;
+  tbl.classList.toggle('show-extra');
+  const btn = $('monthsToggleExtra');
+  const expanded = tbl.classList.contains('show-extra');
+  btn.innerHTML = expanded
+    ? '<i class="bi bi-arrows-collapse"></i> 精简列'
+    : '<i class="bi bi-arrows-expand"></i> 详细列';
+});
 
 window.openDetail = async function(ym) {
   try {

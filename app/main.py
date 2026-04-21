@@ -516,34 +516,157 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
         with _state_lock:
             s = _ensure_state()
             months = s.get("months", [])
+            payers = s.get("payers", [])
+            payer_names = {p["id"]: p.get("name", p["id"]) for p in payers}
             for idx, m in enumerate(months):
                 if m["yearMonth"] == ym:
                     prev_per = (
                         months[idx - 1].get("computed", {}).get("perPayer", {}) if idx > 0 else {}
                     )
-                    per = m.get("computed", {}).get("perPayer", {})
-                    formulas = {}
+                    computed = m.get("computed", {})
+                    per = computed.get("perPayer", {})
+                    total_interest = computed.get("totalInterest", 0.0)
+
+                    # Build payment lookup
+                    pay_map = {
+                        pp["payerId"]: float(pp.get("amount", 0))
+                        for pp in m.get("payerPayments", [])
+                    }
+
+                    # Enrich perPayer with payment amount
+                    enriched = {}
                     for pid, info in per.items():
-                        prev_r = prev_per.get(pid, {}).get("ratio", 0.0) if idx > 0 else None
-                        formulas[pid] = {
-                            "interestShareFormula": (
-                                f"{prev_r} * {m.get('computed', {}).get('totalInterest', 0)}"
-                                if prev_r is not None
-                                else "first-month seeding"
-                            ),
-                            "rawPrincipalFormula": (
-                                f"payment - interestShare = {info.get('rawPrincipal')}"
-                            ),
-                        }
+                        enriched[pid] = {**info, "payment": pay_map.get(pid, 0.0)}
+
+                    # Generate human-readable calculation steps
+                    steps: list[str] = []
+                    mode = m.get("mode", "auto")
+                    if mode == "auto":
+                        steps.append(f"本月总利息 = {total_interest}")
+                        steps.append("")
+                        steps.append("Step 1 — 利息分摊 (按上月比例)：")
+                        for pid in per:
+                            prev_r = prev_per.get(pid, {}).get("ratio")
+                            i_share = per[pid].get("interestShare", 0)
+                            name = payer_names.get(pid, pid)
+                            if prev_r is not None:
+                                steps.append(
+                                    f"  {name}: {prev_r:.4f} × {total_interest} = {i_share}"
+                                )
+                            else:
+                                steps.append(f"  {name}: 首月均分 → {i_share}")
+
+                        steps.append("")
+                        steps.append("Step 2 — 原始净本金 (还款 − 利息分摊)：")
+                        for pid in per:
+                            name = payer_names.get(pid, pid)
+                            pay = pay_map.get(pid, 0)
+                            raw = per[pid].get("rawPrincipal", 0)
+                            i_share = per[pid].get("interestShare", 0)
+                            steps.append(f"  {name}: {pay} − {i_share} = {raw}")
+
+                        # Step 3: negative redistribution
+                        s_minus = [
+                            pid
+                            for pid in per
+                            if per[pid].get("rawPrincipal", 0) < 0
+                        ]
+                        if s_minus:
+                            steps.append("")
+                            steps.append("Step 3 — 负本金再分配：")
+                            for pid in s_minus:
+                                name = payer_names.get(pid, pid)
+                                raw = per[pid].get("rawPrincipal", 0)
+                                steps.append(
+                                    f"  {name} 原始净本金 = {raw} < 0，归零处理"
+                                )
+                        else:
+                            steps.append("")
+                            steps.append("Step 3 — 无负本金，无需再分配")
+
+                        steps.append("")
+                        steps.append("Step 4 — 累计本金更新 & 新比例：")
+                        for pid in per:
+                            name = payer_names.get(pid, pid)
+                            adj = per[pid].get("adjPrincipal", 0)
+                            cp = per[pid].get("cumulativePrincipal", 0)
+                            ratio = per[pid].get("ratio", 0)
+                            steps.append(
+                                f"  {name}: 累计本金 = {cp}，比例 = {ratio:.4f}"
+                            )
+
+                    # Generate redistribution detail
+                    redistribution: list[str] = []
+                    s_minus = [
+                        pid for pid in per if per[pid].get("rawPrincipal", 0) < 0
+                    ]
+                    s_plus = [
+                        pid for pid in per if per[pid].get("rawPrincipal", 0) >= 0
+                    ]
+                    if s_minus:
+                        neg_total = sum(
+                            -per[pid].get("rawPrincipal", 0) for pid in s_minus
+                        )
+                        redistribution.append("以下参还人本月还款不足以覆盖利息：")
+                        for pid in s_minus:
+                            name = payer_names.get(pid, pid)
+                            raw = per[pid].get("rawPrincipal", 0)
+                            redistribution.append(
+                                f"  {name}: 原始净本金 = {raw}，差额 = {-raw}"
+                            )
+                        redistribution.append(f"负差额总计 = {neg_total}")
+                        redistribution.append("")
+                        if not s_plus:
+                            redistribution.append(
+                                "所有参还人均未覆盖利息，调整后净本金全部归零。"
+                            )
+                        else:
+                            redistribution.append(
+                                "该差额按上月比例分摊给正本金参还人："
+                            )
+                            denom = sum(
+                                prev_per.get(pid, {}).get("ratio", 0)
+                                for pid in s_plus
+                            )
+                            for pid in s_plus:
+                                name = payer_names.get(pid, pid)
+                                raw = per[pid].get("rawPrincipal", 0)
+                                adj = per[pid].get("adjPrincipal", 0)
+                                extra = adj - raw
+                                prev_r = prev_per.get(pid, {}).get("ratio", 0)
+                                if denom > 0:
+                                    redistribution.append(
+                                        f"  {name}: {raw} + ({prev_r:.4f}/{denom:.4f}) × {neg_total} = {adj}"
+                                    )
+                                else:
+                                    redistribution.append(
+                                        f"  {name}: {raw} + {extra} (均分) = {adj}"
+                                    )
+
                     return jsonify(
                         {
                             "yearMonth": ym,
-                            "mode": m.get("mode", "auto"),
+                            "mode": mode,
                             "loanDetails": m.get("loanDetails", []),
                             "payerPayments": m.get("payerPayments", []),
                             "manualRatios": m.get("manualRatios"),
-                            "computed": m.get("computed", {}),
-                            "formulas": formulas,
+                            "totalInterest": total_interest,
+                            "perPayer": enriched,
+                            "steps": steps,
+                            "redistribution": redistribution,
+                            "formulas": {
+                                pid: {
+                                    "interestShareFormula": (
+                                        f"{prev_per.get(pid, {}).get('ratio', 0):.4f} × {total_interest}"
+                                        if prev_per.get(pid)
+                                        else "首月均分"
+                                    ),
+                                    "rawPrincipalFormula": (
+                                        f"{pay_map.get(pid, 0)} − {per[pid].get('interestShare', 0)} = {per[pid].get('rawPrincipal', 0)}"
+                                    ),
+                                }
+                                for pid in per
+                            },
                         }
                     )
         return _err("month not found", 404)
@@ -557,12 +680,23 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
             horizon = int(body.get("horizonMonths", 12))
         except (TypeError, ValueError):
             return _err("windowMonths/horizonMonths must be ints")
+        selected_months: list[str] | None = body.get("selectedMonths")
+        if selected_months is not None and not isinstance(selected_months, list):
+            return _err("selectedMonths must be an array of YYYY-MM strings")
+        if isinstance(selected_months, list) and len(selected_months) == 0:
+            return _err("selectedMonths cannot be empty")
         with _state_lock:
             s = _ensure_state()
             months = s.get("months", [])
             if not months:
                 return jsonify({"projection": [], "payoffMonth": None})
-            recent = months[-window:] if window > 0 else months
+            if selected_months:
+                sel_set = set(selected_months)
+                recent = [m for m in months if m["yearMonth"] in sel_set]
+                if not recent:
+                    return _err("none of the selectedMonths matched existing months")
+            else:
+                recent = months[-window:] if window > 0 else months
             # Average payments per payer and per loan
             payer_ids = [p["id"] for p in s.get("payers", [])]
             loan_ids = [ln["id"] for ln in s.get("loans", [])]
