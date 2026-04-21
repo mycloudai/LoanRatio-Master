@@ -586,7 +586,6 @@ def create_app(test_data_path: str | Path | None = None) -> Flask:
                         loan_principal_sums[lid] += principal
             n = max(1, len(recent))
             avg_payments = {pid: sums[pid] / n for pid in payer_ids}
-            avg_interest = interest_sums / n
             avg_principal = principal_sums / n
             avg_loan_interest = {lid: loan_interest_sums[lid] / n for lid in loan_ids}
             avg_loan_principal = {lid: loan_principal_sums[lid] / n for lid in loan_ids}
