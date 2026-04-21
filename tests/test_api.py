@@ -589,9 +589,15 @@ def test_manual_mode_with_loan_details_and_payments(client):
     # Ratios are from manualRatios
     assert computed["p1"]["ratio"] == pytest.approx(0.6, abs=1e-4)
     assert computed["p2"]["ratio"] == pytest.approx(0.4, abs=1e-4)
-    # Interest share is computed for display
-    assert computed["p1"]["interestShare"] >= 0
-    assert computed["p2"]["interestShare"] >= 0
+    # Interest share computed by manual ratio
+    assert computed["p1"]["interestShare"] == pytest.approx(300.0, abs=1e-2)
+    assert computed["p2"]["interestShare"] == pytest.approx(200.0, abs=1e-2)
+    # adjPrincipal = manual_ratio * total_principal (1000)
+    assert computed["p1"]["adjPrincipal"] == pytest.approx(600.0, abs=1e-2)
+    assert computed["p2"]["adjPrincipal"] == pytest.approx(400.0, abs=1e-2)
+    # CP updated: 0 + adjPrincipal
+    assert computed["p1"]["cumulativePrincipal"] == pytest.approx(600.0, abs=1e-2)
+    assert computed["p2"]["cumulativePrincipal"] == pytest.approx(400.0, abs=1e-2)
     # Loan remaining principal updated by loanDetails
     s = client.get("/api/state").get_json()
     ln = next(l for l in s["loans"] if l["id"] == "l1")

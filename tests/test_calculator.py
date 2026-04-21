@@ -165,9 +165,9 @@ def test_scenario_d_negative_principal_redistribution():
     assert per["p2"]["cumulativePrincipal"] == pytest.approx(90_000.0, abs=1e-6)
 
 
-# --------- Scenario E: manual mode interrupts CP ---------------------------
+# --------- Scenario E: manual mode updates CP by ratio × principal ----------
 
-def test_scenario_e_manual_mode_preserves_cp():
+def test_scenario_e_manual_mode_updates_cp():
     s = _empty_state()
     _seed_two_payers_one_loan(s)
     s["downpayment"] = {
@@ -206,12 +206,12 @@ def test_scenario_e_manual_mode_preserves_cp():
     calculator.recompute_all(s)
     m1 = s["months"][0]["computed"]["perPayer"]
     m2 = s["months"][1]["computed"]["perPayer"]
-    # Manual month CP unchanged vs previous
+    # Manual month: principal=0 so CP unchanged vs previous
     assert m2["p1"]["cumulativePrincipal"] == pytest.approx(m1["p1"]["cumulativePrincipal"], abs=1e-6)
     assert m2["p2"]["cumulativePrincipal"] == pytest.approx(m1["p2"]["cumulativePrincipal"], abs=1e-6)
     assert m2["p1"]["ratio"] == pytest.approx(0.5, abs=1e-4)
     assert m2["p2"]["ratio"] == pytest.approx(0.5, abs=1e-4)
-    # Add a third auto month; basis should be 50/50 from manual month
+    # Add a third auto month; basis should be CP ratio (~55.34/44.66), not manual 50/50
     s["months"].append(
         {
             "yearMonth": "2024-03",
@@ -226,9 +226,9 @@ def test_scenario_e_manual_mode_preserves_cp():
     )
     calculator.recompute_all(s)
     m3 = s["months"][2]["computed"]["perPayer"]
-    # interest shares based on 50/50
-    assert m3["p1"]["interestShare"] == pytest.approx(1500.0, abs=1e-6)
-    assert m3["p2"]["interestShare"] == pytest.approx(1500.0, abs=1e-6)
+    # interest shares based on CP ratio, not manual 50/50
+    assert m3["p1"]["interestShare"] == pytest.approx(1660.34, abs=0.01)
+    assert m3["p2"]["interestShare"] == pytest.approx(1339.66, abs=0.01)
 
 
 # --------- Cascading recompute when editing history ------------------------
@@ -399,7 +399,7 @@ def test_downpayment_seeds_initial_ratio():
 
 # --------- Manual mode with multiple subsequent months --------------------
 
-def test_manual_month_basis_carries_to_next_auto():
+def test_manual_month_basis_auto_uses_cp_ratio():
     s = _empty_state()
     _seed_two_payers_one_loan(s)
     s["downpayment"] = {
@@ -435,9 +435,9 @@ def test_manual_month_basis_carries_to_next_auto():
     )
     calculator.recompute_all(s)
     m2 = s["months"][1]["computed"]["perPayer"]
-    # interest share for month 2 uses manual 70/30 basis
-    assert m2["p1"]["interestShare"] == pytest.approx(700.0, abs=1e-6)
-    assert m2["p2"]["interestShare"] == pytest.approx(300.0, abs=1e-6)
+    # Month 2 auto uses CP ratio (50/50 from equal downpayment), not manual 70/30
+    assert m2["p1"]["interestShare"] == pytest.approx(500.0, abs=1e-6)
+    assert m2["p2"]["interestShare"] == pytest.approx(500.0, abs=1e-6)
 
 
 # --------- Edge: three-way redistribution ----------------------------------

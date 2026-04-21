@@ -346,7 +346,7 @@ assert_near "G.p2 ratio 44.85%" "$(awk -v r=$(api_computed 0 p2 ratio) 'BEGIN{pr
 assert_near "G.p3 ratio 1.82%"  "$(awk -v r=$(api_computed 0 p3 ratio) 'BEGIN{print r*100}')" "1.82"
 
 # =====================================================================
-# 10. 情景 E: 手动模式, CP 不变
+# 10. 情景 E: 手动模式, CP 按手动比例更新
 # =====================================================================
 section "10. 情景 E: 手动模式"
 load_state '{
@@ -361,14 +361,14 @@ load_state '{
 visit; click_tab months
 assert_eq "E.p1 比例 50%"     "$(read_testid 'month-ratio-2024-01-p1')"      "50.00%"
 assert_eq "E.p2 比例 50%"     "$(read_testid 'month-ratio-2024-01-p2')"      "50.00%"
-assert_eq "E.p1 累计不变"      "$(read_testid 'month-cumulative-2024-01-p1')" "110,000.00"
-assert_eq "E.p2 累计不变"      "$(read_testid 'month-cumulative-2024-01-p2')" "90,000.00"
+assert_eq "E.p1 累计含本金"    "$(read_testid 'month-cumulative-2024-01-p1')" "111,000.00"
+assert_eq "E.p2 累计含本金"    "$(read_testid 'month-cumulative-2024-01-p2')" "91,000.00"
 
 # =====================================================================
 # 11. 手动 → 自动模式基准切换
-#   月1 manual 50/50, 月2 auto 利息 1000 付款 1000/1000
-#   月2 利息份额 500/500 (使用月1 手动比例), 原始净本金 500/500
-#   CP: 110500/90500 (月1 manual 未变 CP, 月2 累加)
+#   月1 manual 50/50, principal=0 → CP 不变 (110000/90000)
+#   月2 auto 利息 1000 付款 1000/1000
+#   月2 利息份额按 CP 比例 55/45 (非手动比例)
 # =====================================================================
 section "11. 手动→自动模式基准切换"
 load_state '{
@@ -385,10 +385,10 @@ load_state '{
      "payerPayments":[{"payerId":"p1","amount":1000},{"payerId":"p2","amount":1000}]}
   ]
 }'
-assert_near "月2 利息份额 p1 = 500 (基于手动 50%)" "$(api_computed 1 p1 interestShare)" "500"
-assert_near "月2 利息份额 p2 = 500 (基于手动 50%)" "$(api_computed 1 p2 interestShare)" "500"
-assert_near "月2 p1 累计 = 110500"                 "$(api_computed 1 p1 cumulativePrincipal)" "110500"
-assert_near "月2 p2 累计 = 90500"                  "$(api_computed 1 p2 cumulativePrincipal)" "90500"
+assert_near "月2 利息份额 p1 = 550 (基于 CP 55%)" "$(api_computed 1 p1 interestShare)" "550"
+assert_near "月2 利息份额 p2 = 450 (基于 CP 45%)" "$(api_computed 1 p2 interestShare)" "450"
+assert_near "月2 p1 累计 = 110450"                 "$(api_computed 1 p1 cumulativePrincipal)" "110450"
+assert_near "月2 p2 累计 = 90550"                  "$(api_computed 1 p2 cumulativePrincipal)" "90550"
 
 # =====================================================================
 # 12. 参还人 startMonth: 中途加入

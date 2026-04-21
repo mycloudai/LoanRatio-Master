@@ -6,7 +6,9 @@ Implements the four-step monthly model described in PLAN.md:
   3. Negative principals get redistributed to S+ payers weighted by r_i(t-1)
   4. CP_i(t) = CP_i(t-1) + adj_i(t);  r_i(t) = CP_i(t) / CP(t)
 
-Manual mode: r_i(t) = manualRatios[i] directly. CP unchanged. Interest share for display only.
+Manual mode: r_i(t) = manualRatios[i] directly. CP updated by manual ratio * total principal.
+   Interest share computed by manual ratio for display.
+   Next month's r_i(t-1) reverts to CP_i(t) / CP(t), not manual ratios.
 
 First-month seeding:
   - If downpayment present (sum > 0): r_i(0) = CP0_i / sum(CP0)
@@ -160,19 +162,22 @@ def _compute_manual_month(
     prev_cp: dict[str, float],
     payments: dict[str, float],
     total_interest: float,
+    total_principal: float,
     manual_ratios: dict[str, float],
 ) -> dict[str, dict[str, float]]:
     per: dict[str, dict[str, float]] = {}
     for pid in payer_ids_all:
         is_active = pid in active_ids
-        i_share = prev_ratio.get(pid, 0.0) * total_interest if is_active else 0.0
+        mr = float(manual_ratios.get(pid, 0.0))
+        i_share = mr * total_interest if is_active else 0.0
         pay = payments.get(pid, 0.0) if is_active else 0.0
+        adj = mr * total_principal if is_active else 0.0
         per[pid] = {
             "interestShare": i_share,
             "rawPrincipal": (pay - i_share) if is_active else 0.0,
-            "adjPrincipal": 0.0,  # manual doesn't update CP
-            "cumulativePrincipal": prev_cp.get(pid, 0.0),
-            "ratio": float(manual_ratios.get(pid, 0.0)),
+            "adjPrincipal": adj,
+            "cumulativePrincipal": prev_cp.get(pid, 0.0) + adj,
+            "ratio": mr,
         }
     return per
 
@@ -222,6 +227,7 @@ def recompute_all(state: dict[str, Any]) -> dict[str, Any]:
 
         if mode == "manual":
             manual_ratios = m.get("manualRatios") or {}
+            total_principal = sum(float(ld.get("principal", 0.0)) for ld in loan_details)
             per = _compute_manual_month(
                 payer_ids_all=payer_ids_all,
                 active_ids=active_ids,
@@ -229,10 +235,15 @@ def recompute_all(state: dict[str, Any]) -> dict[str, Any]:
                 prev_cp=cp_state,
                 payments=payments,
                 total_interest=total_interest,
+                total_principal=total_principal,
                 manual_ratios=manual_ratios,
             )
-            # Manual: CP unchanged, but next-month uses manual ratios as basis
-            next_ratio = {pid: float(manual_ratios.get(pid, 0.0)) for pid in payer_ids_all}
+            cp_state = {pid: per[pid]["cumulativePrincipal"] for pid in payer_ids_all}
+            cp_total = sum(cp_state.values())
+            if cp_total > 0:
+                next_ratio = {pid: cp_state[pid] / cp_total for pid in payer_ids_all}
+            else:
+                next_ratio = {pid: float(manual_ratios.get(pid, 0.0)) for pid in payer_ids_all}
         else:
             per = _compute_auto_month(
                 payer_ids_all=payer_ids_all,
