@@ -249,12 +249,12 @@ load_state '{
     "payerPayments":[{"payerId":"p1","amount":1800},{"payerId":"p2","amount":1200}]}]
 }'
 visit; click_tab months
-assert_eq "A.p1 利息份额" "$(read_testid 'month-interest-share-2024-01-p1')" "1800.00"
-assert_eq "A.p2 利息份额" "$(read_testid 'month-interest-share-2024-01-p2')" "1200.00"
+assert_eq "A.p1 利息份额" "$(read_testid 'month-interest-share-2024-01-p1')" "1,800.00"
+assert_eq "A.p2 利息份额" "$(read_testid 'month-interest-share-2024-01-p2')" "1,200.00"
 assert_eq "A.p1 净本金 0" "$(read_testid 'month-adj-principal-2024-01-p1')"  "0.00"
 assert_eq "A.p2 净本金 0" "$(read_testid 'month-adj-principal-2024-01-p2')"  "0.00"
-assert_eq "A.p1 累计 60w" "$(read_testid 'month-cumulative-2024-01-p1')"    "600000.00"
-assert_eq "A.p2 累计 40w" "$(read_testid 'month-cumulative-2024-01-p2')"    "400000.00"
+assert_eq "A.p1 累计 60w" "$(read_testid 'month-cumulative-2024-01-p1')"    "600,000.00"
+assert_eq "A.p2 累计 40w" "$(read_testid 'month-cumulative-2024-01-p2')"    "400,000.00"
 assert_eq "A.p1 比例 60%" "$(read_testid 'month-ratio-2024-01-p1')"         "60.00%"
 assert_eq "A.p2 比例 40%" "$(read_testid 'month-ratio-2024-01-p2')"         "40.00%"
 
@@ -271,10 +271,10 @@ load_state '{
     "payerPayments":[{"payerId":"p1","amount":2500},{"payerId":"p2","amount":2500}]}]
 }'
 visit; click_tab months
-assert_eq "B.p1 利息 1500 (50%)" "$(read_testid 'month-interest-share-2024-01-p1')" "1500.00"
-assert_eq "B.p2 利息 1500 (50%)" "$(read_testid 'month-interest-share-2024-01-p2')" "1500.00"
-assert_eq "B.p1 净本金 1000"     "$(read_testid 'month-adj-principal-2024-01-p1')"  "1000.00"
-assert_eq "B.p2 净本金 1000"     "$(read_testid 'month-adj-principal-2024-01-p2')"  "1000.00"
+assert_eq "B.p1 利息 1500 (50%)" "$(read_testid 'month-interest-share-2024-01-p1')" "1,500.00"
+assert_eq "B.p2 利息 1500 (50%)" "$(read_testid 'month-interest-share-2024-01-p2')" "1,500.00"
+assert_eq "B.p1 净本金 1000"     "$(read_testid 'month-adj-principal-2024-01-p1')"  "1,000.00"
+assert_eq "B.p2 净本金 1000"     "$(read_testid 'month-adj-principal-2024-01-p2')"  "1,000.00"
 assert_eq "B.p1 比例 50%"        "$(read_testid 'month-ratio-2024-01-p1')"         "50.00%"
 assert_eq "B.p2 比例 50%"        "$(read_testid 'month-ratio-2024-01-p2')"         "50.00%"
 
@@ -291,12 +291,12 @@ load_state '{
     "payerPayments":[{"payerId":"p1","amount":4000},{"payerId":"p2","amount":2000}]}]
 }'
 visit; click_tab months
-assert_eq "C.p1 利息 1650"   "$(read_testid 'month-interest-share-2024-01-p1')" "1650.00"
-assert_eq "C.p2 利息 1350"   "$(read_testid 'month-interest-share-2024-01-p2')" "1350.00"
-assert_eq "C.p1 净本金 2350" "$(read_testid 'month-adj-principal-2024-01-p1')"  "2350.00"
+assert_eq "C.p1 利息 1650"   "$(read_testid 'month-interest-share-2024-01-p1')" "1,650.00"
+assert_eq "C.p2 利息 1350"   "$(read_testid 'month-interest-share-2024-01-p2')" "1,350.00"
+assert_eq "C.p1 净本金 2350" "$(read_testid 'month-adj-principal-2024-01-p1')"  "2,350.00"
 assert_eq "C.p2 净本金 650"  "$(read_testid 'month-adj-principal-2024-01-p2')"  "650.00"
-assert_eq "C.p1 累计 112350" "$(read_testid 'month-cumulative-2024-01-p1')"    "112350.00"
-assert_eq "C.p2 累计 90650"  "$(read_testid 'month-cumulative-2024-01-p2')"    "90650.00"
+assert_eq "C.p1 累计 112350" "$(read_testid 'month-cumulative-2024-01-p1')"    "112,350.00"
+assert_eq "C.p2 累计 90650"  "$(read_testid 'month-cumulative-2024-01-p2')"    "90,650.00"
 assert_eq "C.p1 比例 55.34%" "$(read_testid 'month-ratio-2024-01-p1')"         "55.34%"
 assert_eq "C.p2 比例 44.66%" "$(read_testid 'month-ratio-2024-01-p2')"         "44.66%"
 
@@ -313,10 +313,10 @@ load_state '{
     "payerPayments":[{"payerId":"p1","amount":4000},{"payerId":"p2","amount":1000}]}]
 }'
 visit; click_tab months
-assert_eq "D.p1 adj=2700 (含垫付)"  "$(read_testid 'month-adj-principal-2024-01-p1')" "2700.00"
+assert_eq "D.p1 adj=2700 (含垫付)"  "$(read_testid 'month-adj-principal-2024-01-p1')" "2,700.00"
 assert_eq "D.p2 adj=0 归零"         "$(read_testid 'month-adj-principal-2024-01-p2')" "0.00"
-assert_eq "D.p1 累计 112700"        "$(read_testid 'month-cumulative-2024-01-p1')"    "112700.00"
-assert_eq "D.p2 累计 90000 不变"    "$(read_testid 'month-cumulative-2024-01-p2')"    "90000.00"
+assert_eq "D.p1 累计 112700"        "$(read_testid 'month-cumulative-2024-01-p1')"    "112,700.00"
+assert_eq "D.p2 累计 90000 不变"    "$(read_testid 'month-cumulative-2024-01-p2')"    "90,000.00"
 assert_eq "D.p1 比例 55.60%"        "$(read_testid 'month-ratio-2024-01-p1')"         "55.60%"
 assert_eq "D.p2 比例 44.40%"        "$(read_testid 'month-ratio-2024-01-p2')"         "44.40%"
 
@@ -361,8 +361,8 @@ load_state '{
 visit; click_tab months
 assert_eq "E.p1 比例 50%"     "$(read_testid 'month-ratio-2024-01-p1')"      "50.00%"
 assert_eq "E.p2 比例 50%"     "$(read_testid 'month-ratio-2024-01-p2')"      "50.00%"
-assert_eq "E.p1 累计不变"      "$(read_testid 'month-cumulative-2024-01-p1')" "110000.00"
-assert_eq "E.p2 累计不变"      "$(read_testid 'month-cumulative-2024-01-p2')" "90000.00"
+assert_eq "E.p1 累计不变"      "$(read_testid 'month-cumulative-2024-01-p1')" "110,000.00"
+assert_eq "E.p2 累计不变"      "$(read_testid 'month-cumulative-2024-01-p2')" "90,000.00"
 
 # =====================================================================
 # 11. 手动 → 自动模式基准切换
@@ -539,7 +539,7 @@ assert_eq "summary p1 ratio 存在"     "$(exists 'summary-payer-ratio-p1')"   "
 assert_eq "summary p1 CP 存在"        "$(exists 'summary-payer-cp-p1')"      "true"
 assert_eq "summary l1 剩余本金存在"   "$(exists 'summary-loan-remaining-l1')" "true"
 # 剩余本金 = 原始 - Σ 所有月份本金. 原始 500000, 本月总本金 3500+3600+3600+3700=14400 → 485600
-assert_eq "summary l1 剩余 = 485600"   "$(read_testid 'summary-loan-remaining-l1')" "485600.00"
+assert_eq "summary l1 剩余 = 485600"   "$(read_testid 'summary-loan-remaining-l1')" "485,600.00"
 
 # =====================================================================
 # 19. 预测接口 + UI
@@ -768,6 +768,209 @@ load_state '{
 assert_near "零首付 p1 利息份额 100" "$(api_computed 0 p1 interestShare)" "100"
 assert_near "零首付 p1 adj = 100"    "$(api_computed 0 p1 adjPrincipal)" "100"
 assert_near "零首付 p1 ratio 33.33%" "$(awk -v r=$(api_computed 0 p1 ratio) 'BEGIN{printf "%.2f", r*100}')" "33.33"
+
+
+# =====================================================================
+# 37. 贷款默认剩余本金 = 原始金额
+# =====================================================================
+section "37. 贷款剩余本金默认等于原始金额"
+reset_state
+curl -sf -X POST $URL/api/payers -H content-type:application/json -d '{"name":"A"}' >/dev/null
+# Create loan without remainingPrincipal field
+LOAN=$(curl -sf -X POST $URL/api/loans -H content-type:application/json -d '{"name":"测试贷款","originalAmount":800000}')
+assert_eq "默认 rp = original" "$(echo "$LOAN" | jq -r '.remainingPrincipal')" "800000"
+# Create loan with explicit remainingPrincipal
+LOAN2=$(curl -sf -X POST $URL/api/loans -H content-type:application/json -d '{"name":"二手贷","originalAmount":500000,"remainingPrincipal":300000}')
+assert_eq "显式 rp 被保留" "$(echo "$LOAN2" | jq -r '.remainingPrincipal')" "300000"
+
+# =====================================================================
+# 38. 手动模式包含利息本金和还款字段
+# =====================================================================
+section "38. 手动模式贷款利息/本金/还款"
+reset_state
+load_state '{
+  "payers":[{"id":"p1","name":"A"},{"id":"p2","name":"B"}],
+  "loans":[{"id":"l1","name":"L","originalAmount":100000,"remainingPrincipal":100000}],
+  "months":[]
+}'
+MANUAL_R=$(curl -sf -X POST $URL/api/months -H content-type:application/json -d '{
+  "yearMonth":"2024-01","mode":"manual",
+  "loanDetails":[{"loanId":"l1","interest":500,"principal":1000}],
+  "payerPayments":[{"payerId":"p1","amount":1000},{"payerId":"p2","amount":500}],
+  "manualRatios":{"p1":0.6,"p2":0.4}
+}')
+assert_eq "手动模式创建成功" "$(echo "$MANUAL_R" | jq -r '.yearMonth')" "2024-01"
+assert_near "手动 p1 ratio = 0.6" "$(echo "$MANUAL_R" | jq -r '.computed.perPayer.p1.ratio')" "0.6"
+assert_near "手动 p2 ratio = 0.4" "$(echo "$MANUAL_R" | jq -r '.computed.perPayer.p2.ratio')" "0.4"
+# loanDetails should cause remaining to decrease
+REM=$(curl -sf $URL/api/state | jq -r '.loans[0].remainingPrincipal')
+assert_near "手动模式后 remaining = 99000" "$REM" "99000"
+
+# =====================================================================
+# 39. 预测 - 全部历史自动回测 (windowMonths=0)
+# =====================================================================
+section "39. 预测全部历史 (window=0)"
+reset_state
+load_state '{
+  "payers":[{"id":"p1","name":"A"},{"id":"p2","name":"B"}],
+  "loans":[{"id":"l1","name":"L","originalAmount":10000,"remainingPrincipal":10000}],
+  "months":[
+    {"yearMonth":"2024-01","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":100},{"payerId":"p2","amount":100}]},
+    {"yearMonth":"2024-02","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":120},{"payerId":"p2","amount":80}]},
+    {"yearMonth":"2024-03","mode":"auto","loanDetails":[{"loanId":"l1","interest":50,"principal":100}],"payerPayments":[{"payerId":"p1","amount":130},{"payerId":"p2","amount":70}]}
+  ]
+}'
+FC_ALL=$(curl -sf -X POST $URL/api/forecast -H content-type:application/json -d '{"windowMonths":0,"horizonMonths":6}')
+assert_eq "window=0 projection len=6" "$(echo "$FC_ALL" | jq '.projection|length')" "6"
+assert_nonempty "window=0 payoffMonth" "$(echo "$FC_ALL" | jq -r '.payoffMonth')"
+
+# =====================================================================
+# 40. 预测 - 选定月份模式
+# =====================================================================
+section "40. 预测选定月份"
+# Use only month 2024-02 as basis
+FC_SEL=$(curl -sf -X POST $URL/api/forecast -H content-type:application/json -d '{"selectedMonths":["2024-02"],"horizonMonths":6}')
+assert_eq "selectedMonths projection len=6" "$(echo "$FC_SEL" | jq '.projection|length')" "6"
+# Compare with all-history — ratios should differ because 2024-02 has different payment pattern
+R_ALL=$(echo "$FC_ALL" | jq -r '.projection[0].ratios.p1')
+R_SEL=$(echo "$FC_SEL" | jq -r '.projection[0].ratios.p1')
+if [[ "$R_ALL" != "$R_SEL" ]]; then
+  ok "选定月份 vs 全部历史: 比例不同 (all=$R_ALL sel=$R_SEL)"
+else
+  bad "选定月份 vs 全部历史: 比例相同, 应不同"
+fi
+
+# Select multiple months
+FC_MULTI=$(curl -sf -X POST $URL/api/forecast -H content-type:application/json -d '{"selectedMonths":["2024-01","2024-03"],"horizonMonths":3}')
+assert_eq "多月选定 projection len=3" "$(echo "$FC_MULTI" | jq '.projection|length')" "3"
+
+# Invalid selectedMonths — no match
+FC_BAD=$(curl -s -o /dev/null -w '%{http_code}' -X POST $URL/api/forecast -H content-type:application/json -d '{"selectedMonths":["9999-01"],"horizonMonths":3}')
+assert_eq "无匹配月份 → 400" "$FC_BAD" "400"
+
+# Invalid selectedMonths type
+FC_TYPE=$(curl -s -o /dev/null -w '%{http_code}' -X POST $URL/api/forecast -H content-type:application/json -d '{"selectedMonths":"2024-01","horizonMonths":3}')
+assert_eq "非数组 selectedMonths → 400" "$FC_TYPE" "400"
+
+# =====================================================================
+# 41. 时间点快照 - state 含各月 computed 数据
+# =====================================================================
+section "41. 时间点快照数据"
+# Verify each month in state has full computed block
+for IDX in 0 1 2; do
+  YM=$(curl -sf $URL/api/state | jq -r ".months[$IDX].yearMonth")
+  HAS_COMPUTED=$(curl -sf $URL/api/state | jq ".months[$IDX] | has(\"computed\")")
+  assert_eq "月 $YM 含 computed" "$HAS_COMPUTED" "true"
+  P1_RATIO=$(api_computed $IDX p1 ratio)
+  P2_RATIO=$(api_computed $IDX p2 ratio)
+  SUM=$(awk -v a="$P1_RATIO" -v b="$P2_RATIO" 'BEGIN{printf "%.4f", a+b}')
+  assert_near "月 $YM 比例之和=1" "$SUM" "1.0000"
+  CP1=$(api_computed $IDX p1 cumulativePrincipal)
+  assert_nonempty "月 $YM p1 cumPrincipal" "$CP1"
+done
+
+# Month 0: equal payments → equal ratios
+assert_near "月0 p1 ratio = 50%" "$(awk -v r=$(api_computed 0 p1 ratio) 'BEGIN{printf "%.2f", r*100}')" "50.00"
+# Month 2: p1 paid more cumulatively → p1 ratio > p2
+P1R2=$(api_computed 2 p1 ratio)
+P2R2=$(api_computed 2 p2 ratio)
+if awk -v a="$P1R2" -v b="$P2R2" 'BEGIN{exit !(a>b)}'; then
+  ok "月2 p1 ratio > p2 ratio (累计付得多)"
+else
+  bad "月2 p1 应 > p2  p1=$P1R2  p2=$P2R2"
+fi
+
+# =====================================================================
+# 42. UI 月份输入类型验证
+# =====================================================================
+section "42. UI 月份输入 type=month"
+SRC_HTML="$REPO_ROOT/static/index.html"
+if grep -Fq 'type="month"' "$SRC_HTML"; then
+  ok "HTML 含 type=\"month\" 输入"
+else
+  bad "HTML 缺 type=\"month\" 输入"
+fi
+
+# Verify payer start month input is type=month
+if grep -q 'id="payerStartMonthInput".*type="month"' "$SRC_HTML" || grep -q 'type="month".*id="payerStartMonthInput"' "$SRC_HTML"; then
+  ok "payerStartMonthInput 是 type=month"
+else
+  bad "payerStartMonthInput 不是 type=month"
+fi
+
+# Verify month input is type=month
+if grep -q 'id="monthYearMonthInput".*type="month"' "$SRC_HTML" || grep -q 'type="month".*id="monthYearMonthInput"' "$SRC_HTML"; then
+  ok "monthYearMonthInput 是 type=month"
+else
+  bad "monthYearMonthInput 不是 type=month"
+fi
+
+# =====================================================================
+# 43. UI 手动模式显示贷款/还款字段
+# =====================================================================
+section "43. 手动模式不隐藏 monthAutoFields"
+# In the JS, switching to manual mode should NOT hide monthAutoFields
+if grep -q "monthAutoFields.*display.*none" "$SRC_HTML" && ! grep -q "monthAutoFields.*style.*display.*none" "$SRC_HTML"; then
+  ok "monthAutoFields 不含 display:none 初始隐藏"
+fi
+# The JS mode toggle should only toggle monthManualFields, not monthAutoFields
+TOGGLE_LINES=$(grep -c "monthAutoFields" "$SRC_HTML")
+# monthAutoFields should not appear in the radio change handler with display=none
+if grep -A2 "monthMode.*addEventListener" "$SRC_HTML" | grep -q "monthAutoFields"; then
+  bad "模式切换仍隐藏 monthAutoFields"
+else
+  ok "模式切换不隐藏 monthAutoFields"
+fi
+
+# =====================================================================
+# 44. UI 预测模式选择（全部历史 vs 选定月份）
+# =====================================================================
+section "44. UI 预测基准选择"
+if grep -Fq 'forecastBasisAll' "$SRC_HTML"; then
+  ok "HTML 含全部历史选项 forecastBasisAll"
+else
+  bad "HTML 缺全部历史选项"
+fi
+if grep -Fq 'forecastBasisSelected' "$SRC_HTML"; then
+  ok "HTML 含选定月份选项 forecastBasisSelected"
+else
+  bad "HTML 缺选定月份选项"
+fi
+if grep -Fq 'forecastMonthCheckboxes' "$SRC_HTML"; then
+  ok "HTML 含月份复选框容器"
+else
+  bad "HTML 缺月份复选框容器"
+fi
+if grep -Fq 'forecast-month-cb' "$SRC_HTML"; then
+  ok "HTML 含月份复选框 class"
+else
+  bad "HTML 缺月份复选框 class"
+fi
+
+# =====================================================================
+# 45. UI 时间点快照浏览
+# =====================================================================
+section "45. UI 时间点快照"
+if grep -Fq 'snapshotBanner' "$SRC_HTML"; then
+  ok "HTML 含快照横幅 snapshotBanner"
+else
+  bad "HTML 缺 snapshotBanner"
+fi
+if grep -Fq 'snapshotExitBtn' "$SRC_HTML"; then
+  ok "HTML 含返回当前按钮"
+else
+  bad "HTML 缺 snapshotExitBtn"
+fi
+if grep -Fq 'snapshot-row' "$SRC_HTML"; then
+  ok "HTML 含 snapshot-row 行"
+else
+  bad "HTML 缺 snapshot-row"
+fi
+if grep -Fq 'summarySnapshotYm' "$SRC_HTML"; then
+  ok "JS 含 summarySnapshotYm 状态"
+else
+  bad "JS 缺 summarySnapshotYm"
+fi
 
 
 TOTAL=$((PASS+FAIL))

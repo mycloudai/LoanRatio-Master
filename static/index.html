@@ -123,11 +123,32 @@
   .app-footer a:hover { text-decoration: underline; }
 
   /* Empty state */
-  .empty-state { text-align: center; padding: 24px; color: var(--lr-text-muted); }
-  .empty-state .bi { font-size: 2em; display: block; margin-bottom: 8px; opacity: 0.4; }
+  .empty-state { text-align: center; padding: 32px 24px; color: var(--lr-text-muted); }
+  .empty-state .bi { font-size: 2.5em; display: block; margin-bottom: 8px; opacity: 0.5; }
 
   /* Alerts */
   .alert { border-radius: 8px; }
+
+  /* Snapshot row highlight */
+  .snapshot-active { background-color: #dbeafe !important; font-weight: 600; }
+  .snapshot-row { cursor: pointer; }
+  .formula-cell { cursor: pointer; color: var(--lr-primary); text-decoration: underline dotted; transition: background 0.15s; }
+  .formula-cell:hover { background: #dbeafe; }
+
+  /* Toast */
+  .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; }
+  .toast { border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+
+  /* Tab badges */
+  .nav-tabs .badge { font-size: 0.7em; vertical-align: middle; margin-left: 4px; }
+
+  /* Snapshot banner */
+  #snapshotBanner {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #93c5fd;
+    color: #1e40af;
+  }
+  #snapshotBanner b { color: #1e3a8a; }
 
   @media (max-width: 576px) {
     .nav-tabs .nav-link { font-size: 0.82em; padding: 8px 10px; }
@@ -191,9 +212,9 @@
       <div class="card-body">
         <h6>新增参还人</h6>
         <div class="row g-2">
-          <div class="col-md-4"><input class="form-control" placeholder="姓名" id="payerNameInput" data-testid="payer-name-input"></div>
-          <div class="col-md-4"><input class="form-control" placeholder="起始月份 YYYY-MM (可选)" id="payerStartMonthInput" data-testid="payer-start-month-input"></div>
-          <div class="col-md-2"><button class="btn btn-primary w-100" id="payerAddBtn" data-testid="payer-add-btn">添加</button></div>
+          <div class="col-md-4"><label class="form-label small fw-semibold" for="payerNameInput">姓名</label><input class="form-control" placeholder="姓名" id="payerNameInput" data-testid="payer-name-input"></div>
+          <div class="col-md-4"><label class="form-label small fw-semibold" for="payerStartMonthInput">起始月份（可选）</label><input type="month" class="form-control" placeholder="起始月份 YYYY-MM (可选)" id="payerStartMonthInput" data-testid="payer-start-month-input"></div>
+          <div class="col-md-2"><label class="form-label small fw-semibold">&nbsp;</label><button class="btn btn-primary w-100" id="payerAddBtn" data-testid="payer-add-btn">添加</button></div>
         </div>
       </div>
     </div>
@@ -219,10 +240,10 @@
     <div class="card mb-3"><div class="card-body">
       <h6>新增贷款</h6>
       <div class="row g-2">
-        <div class="col-md-3"><input class="form-control" placeholder="贷款名称" id="loanNameInput" data-testid="loan-name-input"></div>
-        <div class="col-md-3"><input type="number" class="form-control" placeholder="原始金额" id="loanOriginalInput" data-testid="loan-original-input"></div>
-        <div class="col-md-3"><input type="number" class="form-control" placeholder="当前剩余本金" id="loanRemainingInput" data-testid="loan-remaining-input"></div>
-        <div class="col-md-3"><button class="btn btn-primary w-100" id="loanAddBtn" data-testid="loan-add-btn">添加</button></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold" for="loanNameInput">贷款名称</label><input class="form-control" placeholder="贷款名称" id="loanNameInput" data-testid="loan-name-input"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold" for="loanOriginalInput">贷款总额</label><input type="number" class="form-control" placeholder="原始金额" id="loanOriginalInput" data-testid="loan-original-input"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold" for="loanRemainingInput">剩余本金（可选）</label><input type="number" class="form-control" placeholder="剩余本金（默认=原始金额）" id="loanRemainingInput" data-testid="loan-remaining-input"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">&nbsp;</label><button class="btn btn-primary w-100" id="loanAddBtn" data-testid="loan-add-btn">添加</button></div>
       </div>
     </div></div>
     <div class="card mb-3"><div class="card-body">
@@ -238,7 +259,7 @@
     <div class="card mb-3"><div class="card-body">
       <h6>录入新月份</h6>
       <div class="row g-2 mb-2">
-        <div class="col-md-3"><input class="form-control" placeholder="年月 YYYY-MM" id="monthYearMonthInput" data-testid="month-yearmonth-input"></div>
+        <div class="col-md-3"><input type="month" class="form-control" id="monthYearMonthInput" data-testid="month-yearmonth-input"></div>
         <div class="col-md-4">
           <div class="form-check form-check-inline">
             <input class="form-check-input" type="radio" name="monthMode" id="monthModeAuto" value="auto" data-testid="month-mode-auto" checked>
@@ -279,8 +300,12 @@
 
   <!-- ===== Summary tab ===== -->
   <div class="tab-pane" id="tab-summary-pane" style="display:none;">
+    <div class="alert alert-info d-flex justify-content-between align-items-center" id="snapshotBanner" style="display:none !important;">
+      <span><i class="bi bi-clock-history me-2"></i>正在查看 <b id="snapshotLabel"></b> 时间点的数据快照</span>
+      <button class="btn btn-sm btn-outline-primary" id="snapshotExitBtn">返回当前</button>
+    </div>
     <div class="card mb-3"><div class="card-body">
-      <h6>各参还人当前权益</h6>
+      <h6 id="summaryPayersTitle">各参还人当前权益</h6>
       <div id="summaryPayers"></div>
     </div></div>
     <div class="card mb-3"><div class="card-body">
@@ -290,7 +315,7 @@
     <div class="card mb-3"><div class="card-body d-flex justify-content-between align-items-center">
       <div>
         <h6 class="mb-0">月度权益比例历史</h6>
-        <div class="small-muted">点击月度净本金可查看完整公式推导</div>
+        <div class="small-muted">点击月份行查看数据快照 · 点击净本金查看完整公式推导</div>
       </div>
       <a class="btn btn-success" id="exportExcelBtn" data-testid="export-excel-btn" href="/api/export/excel" target="_blank">导出 Excel</a>
     </div></div>
@@ -303,10 +328,25 @@
   <div class="tab-pane" id="tab-forecast-pane" style="display:none;">
     <div class="card mb-3"><div class="card-body">
       <h6>权益趋势预测</h6>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">基准数据来源</label>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="forecastBasis" id="forecastBasisAll" value="all" checked>
+          <label class="form-check-label" for="forecastBasisAll">全部历史（自动回测）</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="forecastBasis" id="forecastBasisSelected" value="selected">
+          <label class="form-check-label" for="forecastBasisSelected">选定月份</label>
+        </div>
+      </div>
+      <div id="forecastSelectedMonthsWrap" style="display:none;" class="mb-3">
+        <label class="form-label">选择基准月份（勾选后将以这些月份的平均还款能力进行预测）</label>
+        <div id="forecastMonthCheckboxes" class="d-flex flex-wrap gap-2"></div>
+      </div>
       <div class="row g-2 align-items-end">
-        <div class="col-md-3">
+        <div class="col-md-3" style="display:none;">
           <label class="form-label">基准窗口（月）</label>
-          <input type="number" class="form-control" value="3" id="forecastWindowInput" data-testid="forecast-window-input">
+          <input type="number" class="form-control" value="0" id="forecastWindowInput" data-testid="forecast-window-input">
         </div>
         <div class="col-md-3">
           <label class="form-label">预测时长（月）</label>
@@ -417,12 +457,39 @@
 
 </div><!-- /app-container -->
 
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
 <script>
 // ====================== Helpers ======================
 const fmtPct = r => (r==null||isNaN(r)) ? '-' : (r*100).toFixed(2) + '%';
-const fmtCny = v => (v==null||isNaN(v)) ? '-' : Number(v).toFixed(2);
+const fmtCny = v => (v==null||isNaN(v)) ? '-' : Number(v).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function showToast(message, type='success') {
+  const container = $('toastContainer');
+  const colorMap = { success: 'text-bg-success', error: 'text-bg-danger', info: 'text-bg-primary' };
+  const iconMap = { success: 'bi-check-circle-fill', error: 'bi-exclamation-triangle-fill', info: 'bi-info-circle-fill' };
+  const cls = colorMap[type] || colorMap.info;
+  const icon = iconMap[type] || iconMap.info;
+  const id = 'toast-' + Date.now();
+  const html = `<div id="${id}" class="toast ${cls} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex"><div class="toast-body"><i class="bi ${icon} me-2"></i>${esc(message)}</div>
+    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`;
+  container.insertAdjacentHTML('beforeend', html);
+  const el = document.getElementById(id);
+  const toast = new bootstrap.Toast(el, { delay: type === 'error' ? 5000 : 3000 });
+  el.addEventListener('hidden.bs.toast', () => el.remove());
+  toast.show();
+}
+
+async function withLoading(btn, fn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>处理中…';
+  try { await fn(); } finally { btn.innerHTML = orig; btn.disabled = false; }
+}
 
 async function api(method, url, body) {
   const opts = { method, headers: {'Content-Type':'application/json'} };
@@ -452,6 +519,16 @@ function renderAll() {
   renderLoans();
   renderMonthsTab();
   renderSummary();
+  updateTabBadges();
+}
+
+function updateTabBadges() {
+  const p = (STATE?.payers||[]).length;
+  const l = (STATE?.loans||[]).length;
+  const m = (STATE?.months||[]).length;
+  document.querySelector('[data-tab="payers"]').innerHTML = '<i class="bi bi-people-fill"></i>参还人' + (p ? ` <span class="badge bg-primary rounded-pill">${p}</span>` : '');
+  document.querySelector('[data-tab="loans"]').innerHTML = '<i class="bi bi-bank2"></i>贷款' + (l ? ` <span class="badge bg-primary rounded-pill">${l}</span>` : '');
+  document.querySelector('[data-tab="months"]').innerHTML = '<i class="bi bi-calendar3"></i>月份' + (m ? ` <span class="badge bg-primary rounded-pill">${m}</span>` : '');
 }
 
 // ====================== Tabs ======================
@@ -502,15 +579,15 @@ async function loadAbout() {
 $('setupDefaultBtn').addEventListener('click', () => {
   $('setupDataPathInput').value = '~/LoanRatioData/data.json';
 });
-$('setupConfirmBtn').addEventListener('click', async () => {
+$('setupConfirmBtn').addEventListener('click', () => withLoading($('setupConfirmBtn'), async () => {
   const path = $('setupDataPathInput').value.trim() || '~/LoanRatioData/data.json';
   try {
     await api('POST', '/api/config', { dataPath: path });
     bootstrap.Modal.getInstance($('setupModal')).hide();
     $('mainApp').style.display = '';
     await loadState();
-  } catch(e) { alert('配置失败：'+e.message); }
-});
+  } catch(e) { showToast('配置失败：'+e.message, 'error'); }
+}));
 
 // ====================== Payers ======================
 function renderPayers() {
@@ -519,12 +596,12 @@ function renderPayers() {
   if (!payers.length) { container.innerHTML = '<div class="empty-state"><i class="bi bi-people"></i>暂无参还人，请先添加</div>'; return; }
   container.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>姓名</th><th>起始月份</th><th>操作</th></tr></thead><tbody>' +
     payers.map(p => `<tr data-testid="payer-row-${esc(p.id)}">
-      <td>${esc(p.id)}</td>
+      <td class="small-muted">${esc(p.id)}</td>
       <td><input class="form-control form-control-sm payer-name-edit" data-id="${esc(p.id)}" value="${esc(p.name)}"></td>
-      <td><input class="form-control form-control-sm payer-start-edit" data-id="${esc(p.id)}" value="${esc(p.startMonth||'')}" placeholder="YYYY-MM"></td>
+      <td><input type="month" class="form-control form-control-sm payer-start-edit" data-id="${esc(p.id)}" value="${esc(p.startMonth||'')}" placeholder="YYYY-MM"></td>
       <td>
         <button class="btn btn-sm btn-outline-primary payer-save-btn" data-id="${esc(p.id)}">保存</button>
-        <button class="btn btn-sm btn-outline-danger" data-testid="payer-delete-${esc(p.id)}" onclick="onPayerDelete('${esc(p.id)}')">删除</button>
+        <button class="btn btn-sm btn-outline-danger" data-testid="payer-delete-${esc(p.id)}" onclick="onPayerDelete('${esc(p.id)}')"><i class="bi bi-trash3 me-1"></i>删除</button>
       </td>
     </tr>`).join('') + '</tbody></table>';
 
@@ -533,20 +610,20 @@ function renderPayers() {
     const name = container.querySelector('.payer-name-edit[data-id="'+id+'"]').value.trim();
     const startMonth = container.querySelector('.payer-start-edit[data-id="'+id+'"]').value.trim() || null;
     try { await api('PATCH', '/api/payers/'+id, { name, startMonth }); await loadState(); }
-    catch(e) { alert('保存失败：'+e.message); }
+    catch(e) { showToast('保存失败：'+e.message, 'error'); }
   }));
 }
 
-$('payerAddBtn').addEventListener('click', async () => {
+$('payerAddBtn').addEventListener('click', () => withLoading($('payerAddBtn'), async () => {
   const name = $('payerNameInput').value.trim();
-  if (!name) { alert('请输入姓名'); return; }
+  if (!name) { showToast('请输入姓名', 'error'); return; }
   const startMonth = $('payerStartMonthInput').value.trim() || null;
   try {
     await api('POST', '/api/payers', { name, startMonth });
     $('payerNameInput').value = ''; $('payerStartMonthInput').value = '';
     await loadState();
-  } catch(e) { alert('添加失败：'+e.message); }
-});
+  } catch(e) { showToast('添加失败：'+e.message, 'error'); }
+}));
 
 let pendingDeletePayerId = null;
 window.onPayerDelete = function(id) {
@@ -556,19 +633,19 @@ window.onPayerDelete = function(id) {
   );
   if (!hasHistory) {
     if (!confirm('确定删除该参还人？')) return;
-    api('DELETE', '/api/payers/'+id+'?strategy=delete').then(loadState).catch(e=>alert(e.message));
+    api('DELETE', '/api/payers/'+id+'?strategy=delete').then(loadState).catch(e=>showToast(e.message, 'error'));
   } else {
     new bootstrap.Modal($('payerDeleteModal')).show();
   }
 };
-$('payerDeleteConfirmBtn').addEventListener('click', async () => {
+$('payerDeleteConfirmBtn').addEventListener('click', () => withLoading($('payerDeleteConfirmBtn'), async () => {
   const strategy = document.querySelector('input[name=payerDelStrategy]:checked').value;
   try {
     await api('DELETE', '/api/payers/'+pendingDeletePayerId+'?strategy='+strategy);
     bootstrap.Modal.getInstance($('payerDeleteModal')).hide();
     await loadState();
-  } catch(e) { alert('删除失败：'+e.message); }
-});
+  } catch(e) { showToast('删除失败：'+e.message, 'error'); }
+}));
 
 // ====================== Downpayment ======================
 function renderDownpayment() {
@@ -591,7 +668,7 @@ function renderDownpayment() {
   if (!allowed) { $('downpaymentSaveBtn').title = '已有还款月份，不能修改首付'; }
 }
 
-$('downpaymentSaveBtn').addEventListener('click', async () => {
+$('downpaymentSaveBtn').addEventListener('click', () => withLoading($('downpaymentSaveBtn'), async () => {
   const inputs = $('downpaymentInputs').querySelectorAll('input[data-id]');
   const contributions = [];
   inputs.forEach(i => {
@@ -601,9 +678,9 @@ $('downpaymentSaveBtn').addEventListener('click', async () => {
   try {
     await api('POST', '/api/months/downpayment', { contributions });
     await loadState();
-    alert('首付已保存');
-  } catch(e) { alert('保存失败：'+e.message); }
-});
+    showToast('首付已保存');
+  } catch(e) { showToast('保存失败：'+e.message, 'error'); }
+}));
 
 // ====================== Loans ======================
 function renderLoans() {
@@ -612,13 +689,13 @@ function renderLoans() {
   if (!loans.length) { wrap.innerHTML = '<div class="empty-state"><i class="bi bi-bank"></i>暂无贷款，请先添加</div>'; return; }
   wrap.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>名称</th><th>原始金额</th><th>剩余本金</th><th>操作</th></tr></thead><tbody>' +
     loans.map(l => `<tr data-testid="loan-row-${esc(l.id)}">
-      <td>${esc(l.id)}</td>
+      <td class="small-muted">${esc(l.id)}</td>
       <td><input class="form-control form-control-sm loan-name-edit" data-id="${esc(l.id)}" value="${esc(l.name)}"></td>
       <td><input type="number" class="form-control form-control-sm loan-orig-edit" data-id="${esc(l.id)}" value="${l.originalAmount}"></td>
       <td><input type="number" class="form-control form-control-sm loan-rem-edit" data-id="${esc(l.id)}" value="${l.remainingPrincipal}"></td>
       <td>
         <button class="btn btn-sm btn-outline-primary loan-save-btn" data-id="${esc(l.id)}">保存</button>
-        <button class="btn btn-sm btn-outline-danger" data-testid="loan-delete-${esc(l.id)}" onclick="onLoanDelete('${esc(l.id)}')">删除</button>
+        <button class="btn btn-sm btn-outline-danger" data-testid="loan-delete-${esc(l.id)}" onclick="onLoanDelete('${esc(l.id)}')"><i class="bi bi-trash3 me-1"></i>删除</button>
       </td>
     </tr>`).join('') + '</tbody></table>';
   wrap.querySelectorAll('.loan-save-btn').forEach(b => b.addEventListener('click', async () => {
@@ -627,21 +704,23 @@ function renderLoans() {
     const originalAmount = parseFloat(wrap.querySelector('.loan-orig-edit[data-id="'+id+'"]').value);
     const remainingPrincipal = parseFloat(wrap.querySelector('.loan-rem-edit[data-id="'+id+'"]').value);
     try { await api('PATCH', '/api/loans/'+id, { name, originalAmount, remainingPrincipal }); await loadState(); }
-    catch(e) { alert('保存失败：'+e.message); }
+    catch(e) { showToast('保存失败：'+e.message, 'error'); }
   }));
 }
 
-$('loanAddBtn').addEventListener('click', async () => {
+$('loanAddBtn').addEventListener('click', () => withLoading($('loanAddBtn'), async () => {
   const name = $('loanNameInput').value.trim();
   const originalAmount = parseFloat($('loanOriginalInput').value);
-  const remainingPrincipal = parseFloat($('loanRemainingInput').value);
-  if (!name || isNaN(originalAmount) || isNaN(remainingPrincipal)) { alert('请完整填写'); return; }
+  const remainingRaw = $('loanRemainingInput').value.trim();
+  const remainingPrincipal = remainingRaw === '' ? originalAmount : parseFloat(remainingRaw);
+  if (!name || isNaN(originalAmount)) { showToast('请填写贷款名称和原始金额', 'error'); return; }
+  if (isNaN(remainingPrincipal)) { showToast('剩余本金格式错误', 'error'); return; }
   try {
     await api('POST', '/api/loans', { name, originalAmount, remainingPrincipal });
     $('loanNameInput').value = ''; $('loanOriginalInput').value = ''; $('loanRemainingInput').value = '';
     await loadState();
-  } catch(e) { alert('添加失败：'+e.message); }
-});
+  } catch(e) { showToast('添加失败：'+e.message, 'error'); }
+}));
 
 let pendingDeleteLoanId = null;
 window.onLoanDelete = function(id) {
@@ -651,7 +730,7 @@ window.onLoanDelete = function(id) {
   );
   if (!hasHistory) {
     if (!confirm('确定删除该贷款？')) return;
-    api('DELETE', '/api/loans/'+id+'?strategy=delete').then(loadState).catch(e=>alert(e.message));
+    api('DELETE', '/api/loans/'+id+'?strategy=delete').then(loadState).catch(e=>showToast(e.message, 'error'));
   } else {
     const sel = $('loanDelMergeTarget'); sel.innerHTML = '';
     STATE.loans.filter(l => l.id !== id).forEach(l => {
@@ -660,20 +739,20 @@ window.onLoanDelete = function(id) {
     new bootstrap.Modal($('loanDeleteModal')).show();
   }
 };
-$('loanDeleteConfirmBtn').addEventListener('click', async () => {
+$('loanDeleteConfirmBtn').addEventListener('click', () => withLoading($('loanDeleteConfirmBtn'), async () => {
   const strategy = document.querySelector('input[name=loanDelStrategy]:checked').value;
   let url = '/api/loans/'+pendingDeleteLoanId+'?strategy='+strategy;
   if (strategy === 'merge') {
     const tgt = $('loanDelMergeTarget').value;
-    if (!tgt) { alert('请选择合并目标'); return; }
+    if (!tgt) { showToast('请选择合并目标', 'error'); return; }
     url += '&targetId='+encodeURIComponent(tgt);
   }
   try {
     await api('DELETE', url);
     bootstrap.Modal.getInstance($('loanDeleteModal')).hide();
     await loadState();
-  } catch(e) { alert('删除失败：'+e.message); }
-});
+  } catch(e) { showToast('删除失败：'+e.message, 'error'); }
+}));
 
 // ====================== Months ======================
 function nextExpectedMonth() {
@@ -698,9 +777,13 @@ function renderMonthsTab() {
   const expected = nextExpectedMonth();
   $('monthHint').textContent = expected ? `下一应录入月份：${expected}（必须连续）` : '尚未录入任何月份，可从首付("0000-00")或第一个月开始';
   if (expected && !$('monthYearMonthInput').value) $('monthYearMonthInput').value = expected;
+  if (!expected && !$('monthYearMonthInput').value) {
+    const now = new Date();
+    $('monthYearMonthInput').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
 
   // loan fields
-  $('monthLoanFields').innerHTML = loans.map(l => `
+  $('monthLoanFields').innerHTML = '<div class="row g-2 mb-1 text-muted small fw-semibold"><div class="col-md-3">贷款</div><div class="col-md-4">本月利息</div><div class="col-md-4">本月还本金</div></div>' + loans.map(l => `
     <div class="row g-2 mb-1 align-items-center">
       <div class="col-md-3">${esc(l.name)}</div>
       <div class="col-md-4"><input type="number" class="form-control form-control-sm" placeholder="本月利息"
@@ -710,7 +793,7 @@ function renderMonthsTab() {
     </div>`).join('');
 
   // payer payment fields
-  $('monthPayerPaymentFields').innerHTML = payers.map(p => `
+  $('monthPayerPaymentFields').innerHTML = '<div class="row g-2 mb-1 text-muted small fw-semibold"><div class="col-md-3">参还人</div><div class="col-md-6">本月还款额</div></div>' + payers.map(p => `
     <div class="row g-2 mb-1 align-items-center">
       <div class="col-md-3">${esc(p.name)}</div>
       <div class="col-md-6"><input type="number" class="form-control form-control-sm" placeholder="本月还款额"
@@ -730,13 +813,12 @@ function renderMonthsTab() {
 
 document.querySelectorAll('input[name=monthMode]').forEach(r => r.addEventListener('change', () => {
   const mode = document.querySelector('input[name=monthMode]:checked').value;
-  $('monthAutoFields').style.display = mode==='auto' ? '' : 'none';
   $('monthManualFields').style.display = mode==='manual' ? '' : 'none';
 }));
 
-$('monthCreateBtn').addEventListener('click', async () => {
+$('monthCreateBtn').addEventListener('click', () => withLoading($('monthCreateBtn'), async () => {
   const yearMonth = $('monthYearMonthInput').value.trim();
-  if (!yearMonth) { alert('请填写年月'); return; }
+  if (!yearMonth) { showToast('请填写年月', 'error'); return; }
   const mode = document.querySelector('input[name=monthMode]:checked').value;
   const loanDetails = [];
   $('monthLoanFields').querySelectorAll('input[data-loanid]').forEach(i => {
@@ -756,17 +838,17 @@ $('monthCreateBtn').addEventListener('click', async () => {
     $('monthManualRatioFields').querySelectorAll('input[data-payerid]').forEach(i => {
       const v = parseFloat(i.value)||0; manualRatios[i.dataset.payerid] = v; sum += v;
     });
-    if (Math.abs(sum - 1) > 1e-6) { alert('手动比例总和必须为 1.0（当前 '+sum.toFixed(4)+'）'); return; }
+    if (Math.abs(sum - 1) > 1e-6) { showToast('手动比例总和必须为 1.0（当前 '+sum.toFixed(4)+'）', 'error'); return; }
     body.manualRatios = manualRatios;
   }
   try {
     await api('POST', '/api/months', body);
-    // reset inputs
     document.querySelectorAll('#monthAutoFields input, #monthManualFields input').forEach(i => i.value='');
     $('monthYearMonthInput').value = '';
     await loadState();
-  } catch(e) { alert('创建失败：'+e.message); }
-});
+    openDetail(yearMonth);
+  } catch(e) { showToast('创建失败：'+e.message, 'error'); }
+}));
 
 function payerName(pid) {
   const p = (STATE.payers||[]).find(x=>x.id===pid); return p?p.name:pid;
@@ -810,8 +892,8 @@ function renderMonthsList() {
                <td class="ratio-cell" data-testid="month-ratio-${esc(m.yearMonth)}-${esc(p.id)}">${ratio}</td>`;
     });
     html += `<td>
-      <button class="btn btn-sm btn-outline-info" data-testid="month-detail-${esc(m.yearMonth)}" onclick="openDetail('${esc(m.yearMonth)}')">详情</button>
-      <button class="btn btn-sm btn-outline-primary" onclick="openMonthEdit('${esc(m.yearMonth)}')">修改</button>
+      <button class="btn btn-sm btn-outline-info" data-testid="month-detail-${esc(m.yearMonth)}" onclick="openDetail('${esc(m.yearMonth)}')"><i class="bi bi-info-circle me-1"></i>详情</button>
+      <button class="btn btn-sm btn-outline-primary" onclick="openMonthEdit('${esc(m.yearMonth)}')"><i class="bi bi-pencil me-1"></i>修改</button>
     </td></tr>`;
   });
   html += '</tbody></table></div>';
@@ -850,7 +932,7 @@ window.openDetail = async function(ym) {
     }
     $('detailModalBody').innerHTML = html;
     new bootstrap.Modal($('detailModal')).show();
-  } catch(e) { alert('加载失败：'+e.message); }
+  } catch(e) { showToast('加载失败：'+e.message, 'error'); }
 };
 
 window.openMonthEdit = function(ym) {
@@ -893,7 +975,7 @@ window.openMonthEdit = function(ym) {
     </div>`;
   });
   $('monthEditBody').innerHTML = html;
-  $('monthEditSaveBtn').onclick = async () => {
+  $('monthEditSaveBtn').onclick = () => withLoading($('monthEditSaveBtn'), async () => {
     if (cascade>0 && !confirm(`将重算 ${cascade} 个后续月份。继续？`)) return;
     const mode = $('meMode').value;
     const loanDetails = loans.map(l => ({
@@ -912,64 +994,184 @@ window.openMonthEdit = function(ym) {
         const v = parseFloat($('monthEditBody').querySelector('.me-mr[data-id="'+p.id+'"]').value)||0;
         manualRatios[p.id] = v; s += v;
       });
-      if (Math.abs(s-1) > 1e-6) { alert('手动比例总和必须为 1.0（当前 '+s.toFixed(4)+'）'); return; }
+      if (Math.abs(s-1) > 1e-6) { showToast('手动比例总和必须为 1.0（当前 '+s.toFixed(4)+'）', 'error'); return; }
       body.manualRatios = manualRatios;
     }
     try {
       await api('PATCH', '/api/months/'+ym, body);
       bootstrap.Modal.getInstance($('monthEditModal')).hide();
       await loadState();
-    } catch(e) { alert('保存失败：'+e.message); }
-  };
+    } catch(e) { showToast('保存失败：'+e.message, 'error'); }
+  });
   new bootstrap.Modal($('monthEditModal')).show();
 };
 
 // ====================== Summary ======================
+let summarySnapshotYm = null;
+
+$('snapshotExitBtn').addEventListener('click', () => {
+  summarySnapshotYm = null;
+  renderSummary();
+});
+
 async function renderSummary() {
   let summary;
   try { summary = await api('GET', '/api/summary'); }
   catch(e) { return; }
-  const payers = summary.payers || [];
+  const allPayers = summary.payers || [];
   const loans  = summary.loans || [];
-  const months = summary.months || [];
+  const allMonths = summary.months || [];
+  const isSnapshot = summarySnapshotYm != null;
 
-  $('summaryPayers').innerHTML = payers.length ? '<table class="table table-sm table-striped"><thead><tr><th>姓名</th><th>累计净本金</th><th>当前权益</th></tr></thead><tbody>' +
-    payers.map(p => `<tr>
-      <td>${esc(p.name)}</td>
-      <td class="ratio-cell" data-testid="summary-payer-cp-${esc(p.id)}">${fmtCny(p.cumulativePrincipal)}</td>
-      <td class="ratio-cell" data-testid="summary-payer-ratio-${esc(p.id)}">${fmtPct(p.currentRatio)}</td>
-    </tr>`).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-people"></i>暂无数据</div>';
+  // Snapshot banner
+  const banner = $('snapshotBanner');
+  if (isSnapshot) {
+    banner.style.cssText = '';
+    $('snapshotLabel').textContent = summarySnapshotYm;
+    $('summaryPayersTitle').textContent = `各参还人权益（截至 ${summarySnapshotYm}）`;
+  } else {
+    banner.style.cssText = 'display:none !important';
+    $('summaryPayersTitle').textContent = '各参还人当前权益';
+  }
 
-  $('summaryLoans').innerHTML = loans.length ? '<table class="table table-sm table-striped"><thead><tr><th>名称</th><th>原始</th><th>剩余本金</th></tr></thead><tbody>' +
-    loans.map(l => `<tr>
-      <td>${esc(l.name)}</td>
-      <td class="ratio-cell">${fmtCny(l.originalAmount)}</td>
-      <td class="ratio-cell" data-testid="summary-loan-remaining-${esc(l.id)}">${fmtCny(l.remainingPrincipal)}</td>
-    </tr>`).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-bank"></i>暂无数据</div>';
+  // Determine which month's data to show in the payer summary
+  const snapIdx = isSnapshot ? allMonths.findIndex(m => m.yearMonth === summarySnapshotYm) : allMonths.length - 1;
+  const visibleMonths = isSnapshot ? allMonths.slice(0, snapIdx + 1) : allMonths;
 
-  let h = '<thead><tr><th>月份</th><th>模式</th>' + payers.map(p=>`<th>${esc(p.name)}</th>`).join('') + '</tr></thead><tbody>';
-  months.forEach(m => {
-    h += `<tr><td>${esc(m.yearMonth)}</td><td>${m.mode==='manual'?'手动':'自动'}</td>`;
-    payers.forEach(p => {
+  // Build payer data from the full state (STATE has computed per-payer info)
+  const stateMonths = (STATE && STATE.months) || [];
+  const snapMonth = snapIdx >= 0 && snapIdx < stateMonths.length ? stateMonths[snapIdx] : null;
+  const snapPer = snapMonth ? (snapMonth.computed || {}).perPayer || {} : {};
+
+  if (isSnapshot && snapMonth) {
+    $('summaryPayers').innerHTML = allPayers.length ? '<table class="table table-sm table-striped"><thead><tr><th>姓名</th><th>累计净本金</th><th>权益比例</th></tr></thead><tbody>' +
+      allPayers.map(p => {
+        const info = snapPer[p.id] || {};
+        const ratio = info.ratio;
+        return `<tr>
+        <td>${esc(p.name)}</td>
+        <td class="ratio-cell">${fmtCny(info.cumulativePrincipal)}</td>
+        <td><div class="d-flex align-items-center gap-2">
+          <div class="progress flex-grow-1" style="height:6px; min-width:60px;">
+            <div class="progress-bar" style="width:${(ratio||0)*100}%; background:var(--lr-primary);"></div>
+          </div>
+          <span class="ratio-cell">${fmtPct(ratio)}</span>
+        </div></td>
+      </tr>`;
+      }).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-people"></i>暂无数据</div>';
+  } else {
+    $('summaryPayers').innerHTML = allPayers.length ? '<table class="table table-sm table-striped"><thead><tr><th>姓名</th><th>累计净本金</th><th>当前权益</th></tr></thead><tbody>' +
+      allPayers.map(p => `<tr>
+        <td>${esc(p.name)}</td>
+        <td class="ratio-cell" data-testid="summary-payer-cp-${esc(p.id)}">${fmtCny(p.cumulativePrincipal)}</td>
+        <td data-testid="summary-payer-ratio-${esc(p.id)}"><div class="d-flex align-items-center gap-2">
+          <div class="progress flex-grow-1" style="height:6px; min-width:60px;">
+            <div class="progress-bar" style="width:${(p.currentRatio||0)*100}%; background:var(--lr-primary);"></div>
+          </div>
+          <span class="ratio-cell">${fmtPct(p.currentRatio)}</span>
+        </div></td>
+      </tr>`).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-people"></i>暂无数据</div>';
+  }
+
+  // Loans — compute remaining as of snapshot
+  if (isSnapshot && snapIdx >= 0) {
+    const loanPaid = {};
+    loans.forEach(l => { loanPaid[l.id] = 0; });
+    for (let i = 0; i <= snapIdx && i < stateMonths.length; i++) {
+      (stateMonths[i].loanDetails || []).forEach(ld => {
+        if (ld.loanId in loanPaid) loanPaid[ld.loanId] += (ld.principal || 0);
+      });
+    }
+    $('summaryLoans').innerHTML = loans.length ? '<table class="table table-sm table-striped"><thead><tr><th>名称</th><th>原始</th><th>剩余本金</th></tr></thead><tbody>' +
+      loans.map(l => {
+        const rem = Math.max(0, l.originalAmount - (loanPaid[l.id] || 0));
+        return `<tr>
+        <td>${esc(l.name)}</td>
+        <td class="ratio-cell">${fmtCny(l.originalAmount)}</td>
+        <td class="ratio-cell">${fmtCny(rem)}</td>
+      </tr>`;
+      }).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-bank"></i>暂无数据</div>';
+  } else {
+    $('summaryLoans').innerHTML = loans.length ? '<table class="table table-sm table-striped"><thead><tr><th>名称</th><th>原始</th><th>剩余本金</th></tr></thead><tbody>' +
+      loans.map(l => `<tr>
+        <td>${esc(l.name)}</td>
+        <td class="ratio-cell">${fmtCny(l.originalAmount)}</td>
+        <td class="ratio-cell" data-testid="summary-loan-remaining-${esc(l.id)}">${fmtCny(l.remainingPrincipal)}</td>
+      </tr>`).join('') + '</tbody></table>' : '<div class="empty-state"><i class="bi bi-bank"></i>暂无数据</div>';
+  }
+
+  let h = '<thead><tr><th>月份</th><th>模式</th>' + allPayers.map(p=>`<th>${esc(p.name)} 净本金</th><th>${esc(p.name)} 比例</th>`).join('') + '</tr></thead><tbody>';
+  const stMonths = (STATE && STATE.months) || [];
+  visibleMonths.forEach((m, vi) => {
+    const isSel = isSnapshot && m.yearMonth === summarySnapshotYm;
+    const stm = stMonths.find(x => x.yearMonth === m.yearMonth);
+    const per = stm ? (stm.computed || {}).perPayer || {} : {};
+    h += `<tr class="snapshot-row${isSel?' snapshot-active':''}" data-ym="${esc(m.yearMonth)}" title="点击查看此月快照"><td>${esc(m.yearMonth)}</td><td>${m.mode==='manual'?'手动':'自动'}</td>`;
+    allPayers.forEach(p => {
+      const info = per[p.id] || {};
       const r = (m.ratios||{})[p.id];
+      h += `<td class="formula-cell" data-detail-ym="${esc(m.yearMonth)}" title="点击查看公式推导">${fmtCny(info.adjPrincipal)}</td>`;
       h += `<td class="ratio-cell">${r!=null?fmtPct(r):'-'}</td>`;
     });
     h += '</tr>';
   });
   h += '</tbody>';
   $('summaryHistoryTable').innerHTML = h;
+
+  // Attach click handlers to snapshot rows
+  $('summaryHistoryTable').querySelectorAll('.snapshot-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const ym = row.dataset.ym;
+      if (summarySnapshotYm === ym) {
+        summarySnapshotYm = null;
+      } else {
+        summarySnapshotYm = ym;
+      }
+      renderSummary();
+    });
+  });
+
+  // Attach click handlers to formula cells (open detail modal)
+  $('summaryHistoryTable').querySelectorAll('.formula-cell').forEach(cell => {
+    cell.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ym = cell.dataset.detailYm;
+      if (ym) openDetail(ym);
+    });
+  });
 }
 
 // ====================== Forecast ======================
 let forecastChart = null;
-$('forecastRunBtn').addEventListener('click', async () => {
-  const windowMonths = parseInt($('forecastWindowInput').value)||3;
+
+document.querySelectorAll('input[name=forecastBasis]').forEach(r => r.addEventListener('change', () => {
+  const mode = document.querySelector('input[name=forecastBasis]:checked').value;
+  $('forecastSelectedMonthsWrap').style.display = mode==='selected' ? '' : 'none';
+  if (mode==='selected') renderForecastMonthCheckboxes();
+}));
+
+function renderForecastMonthCheckboxes() {
+  const months = (STATE && STATE.months) || [];
+  $('forecastMonthCheckboxes').innerHTML = months.map(m =>
+    `<div class="form-check"><input class="form-check-input forecast-month-cb" type="checkbox" value="${esc(m.yearMonth)}" id="fcm-${esc(m.yearMonth)}"><label class="form-check-label" for="fcm-${esc(m.yearMonth)}">${esc(m.yearMonth)}</label></div>`
+  ).join('');
+}
+
+$('forecastRunBtn').addEventListener('click', () => withLoading($('forecastRunBtn'), async () => {
   const horizonMonths = parseInt($('forecastHorizonInput').value)||12;
+  const basis = document.querySelector('input[name=forecastBasis]:checked').value;
+  const body = { horizonMonths };
+  if (basis === 'selected') {
+    const checked = [...document.querySelectorAll('.forecast-month-cb:checked')].map(cb => cb.value);
+    if (!checked.length) { showToast('请至少选择一个基准月份', 'error'); return; }
+    body.selectedMonths = checked;
+  } else {
+    body.windowMonths = 0;
+  }
   try {
-    const res = await api('POST', '/api/forecast', { windowMonths, horizonMonths });
+    const res = await api('POST', '/api/forecast', body);
     $('forecastPayoffMonth').textContent = res.payoffMonth || '未预测出';
     const payers = STATE.payers || [];
-    // Final ratio per payer
     const series = res.series || {};
     const labels = res.months || [];
     $('forecastFinalRatios').innerHTML = '<h6>预测期末权益比例</h6>' + payers.map(p => {
@@ -978,24 +1180,30 @@ $('forecastRunBtn').addEventListener('click', async () => {
       return `<div>${esc(p.name)}：<span class="ratio-cell" data-testid="forecast-final-ratio-${esc(p.id)}">${finalR!=null?fmtPct(finalR):'-'}</span></div>`;
     }).join('');
 
-    if (forecastChart) forecastChart.destroy();
-    const ctx = $('forecastChart').getContext('2d');
-    const colors = ['#0d6efd','#dc3545','#198754','#ffc107','#6f42c1','#20c997','#fd7e14'];
-    const datasets = payers.map((p, idx) => ({
-      label: p.name,
-      data: (series[p.id]||[]).map(v => v*100),
-      borderColor: colors[idx%colors.length], fill:false, tension:0.2
-    }));
-    forecastChart = new Chart(ctx, {
-      type:'line', data:{ labels, datasets },
-      options:{ responsive:true, scales:{ y:{ title:{display:true,text:'权益比例 %'} } } }
-    });
-  } catch(e) { alert('预测失败：'+e.message); }
-});
+    if (typeof Chart === 'undefined') {
+      $('forecastChart').style.display = 'none';
+      showToast('图表库未加载，数值结果仍然有效。请检查网络后刷新页面。', 'info');
+    } else {
+      $('forecastChart').style.display = '';
+      if (forecastChart) forecastChart.destroy();
+      const ctx = $('forecastChart').getContext('2d');
+      const colors = ['#0d6efd','#dc3545','#198754','#ffc107','#6f42c1','#20c997','#fd7e14'];
+      const datasets = payers.map((p, idx) => ({
+        label: p.name,
+        data: (series[p.id]||[]).map(v => v*100),
+        borderColor: colors[idx%colors.length], fill:false, tension:0.2
+      }));
+      forecastChart = new Chart(ctx, {
+        type:'line', data:{ labels, datasets },
+        options:{ responsive:true, scales:{ y:{ title:{display:true,text:'权益比例 %'} } } }
+      });
+    }
+  } catch(e) { showToast('预测失败：'+e.message, 'error'); }
+}));
 
 // ====================== Boot ======================
 document.addEventListener('DOMContentLoaded', () => {
-  checkSetup().catch(e => alert('启动失败：'+e.message));
+  checkSetup().catch(e => showToast('启动失败：'+e.message, 'error'));
 });
 </script>
 </body>
